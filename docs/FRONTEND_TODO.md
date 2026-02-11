@@ -184,20 +184,20 @@
 - [x] Create selectors for derived state
 
 ## Phase 15: API Integration
-- [ ] Create API service (`services/api.js`)
-- [ ] Implement Axios instance with base URL
-- [ ] Add request interceptors (auth, headers)
-- [ ] Add response interceptors (error handling)
-- [ ] Create API functions:
-  - [ ] generateAdventure()
-  - [ ] startGame()
-  - [ ] getGameState()
-  - [ ] submitChoice()
-  - [ ] saveGame()
-  - [ ] getSavedGames()
-  - [ ] deleteSavedGame()
-  - [ ] getSettings()
-  - [ ] updateSettings()
+- [x] Create API service (`services/api.js`)
+- [x] Implement Axios instance with base URL
+- [x] Add request interceptors (auth, headers)
+- [x] Add response interceptors (error handling)
+- [x] Create API functions:
+  - [x] generateAdventure()
+  - [x] startGame()
+  - [x] getGameState()
+  - [x] submitChoice()
+  - [x] saveGame()
+  - [x] getSavedGames()
+  - [x] deleteSavedGame()
+  - [x] getSettings()
+  - [x] updateSettings()
 - [ ] Implement retry logic for failed requests
 
 ## Phase 16: Polish & Animations
