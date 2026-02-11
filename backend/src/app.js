@@ -12,7 +12,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 const adventuresRouter = require('./routes/adventures');
+const gamesRouter = require('./routes/games');
 app.use('/api/adventures', adventuresRouter);
+app.use('/api/games', gamesRouter);
 
 app.get('/', (req, res) => {
   res.json({

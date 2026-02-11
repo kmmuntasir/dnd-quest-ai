@@ -67,23 +67,23 @@
 - [ ] Add input validation middleware
 
 ## Phase 6: API Routes - Game Play
-- [ ] Create game routes (`routes/games.js`)
-- [ ] Implement `POST /api/games/start`
-  - [ ] Validate adventure ID and character data
-  - [ ] Generate character stats (3d6 per stat)
-  - [ ] Load first scene
-  - [ ] Create saved game entry
-- [ ] Implement `GET /api/games/:id`
-  - [ ] Load game state
-  - [ ] Return current scene and character data
-- [ ] Implement `POST /api/games/:id/choice`
-  - [ ] Validate choice ID and dice roll
-  - [ ] Call Groq for outcome
-  - [ ] Update character state (HP, inventory, gold)
-  - [ ] Generate next scene or conclude adventure
-  - [ ] Update saved game
-- [ ] Implement `POST /api/games/:id/save` (manual save)
-- [ ] Add dice roll validation (must be 1-20)
+- [x] Create game routes (`routes/games.js`)
+- [x] Implement `POST /api/games/start`
+  - [x] Validate adventure ID and character data
+  - [x] Generate character stats (3d6 per stat)
+  - [x] Load first scene
+  - [x] Create saved game entry
+- [x] Implement `GET /api/games/:id`
+  - [x] Load game state
+  - [x] Return current scene and character data
+- [x] Implement `POST /api/games/:id/choice`
+  - [x] Validate choice ID and dice roll
+  - [x] Call Groq for outcome
+  - [x] Update character state (HP, inventory, gold)
+  - [x] Generate next scene or conclude adventure
+  - [x] Update saved game
+- [x] Implement `POST /api/games/:id/save` (manual save)
+- [x] Add dice roll validation (must be 1-20)
 
 ## Phase 7: API Routes - Saved Games
 - [ ] Create saved game routes (`routes/savedGames.js`)
