@@ -86,7 +86,10 @@ PORT=3000
 - [ ] Save/load system
 - [ ] UI polish
 
-See `PRD.md` for complete specifications.
+See `docs/` folder for:
+- `docs/PRD.md` - Complete product requirements document
+- `docs/FRONTEND_TODO.md` - Frontend development task list
+- `docs/BACKEND_TODO.md` - Backend development task list
 
 ## Roadmap
 
