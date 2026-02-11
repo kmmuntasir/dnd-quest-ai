@@ -116,11 +116,11 @@
   - [x] Response formatting
 
 ## Phase 10: Testing
-- [ ] Write unit tests for Groq service
-- [ ] Write unit tests for image service
-- [ ] Write integration tests for API endpoints
-- [ ] Test with real Groq API (dev environment)
-- [ ] Test with real Pollinations.ai API (dev environment)
+- [x] Write unit tests for Groq service
+- [x] Write unit tests for image service
+- [x] Write integration tests for API endpoints
+- [x] Test with real Groq API (dev environment)
+- [x] Test with real Pollinations.ai API (dev environment)
 - [ ] Load testing for adventure generation
 - [ ] Error scenario testing (API failures, timeouts)
 
