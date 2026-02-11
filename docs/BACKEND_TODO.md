@@ -105,15 +105,15 @@
   - [x] Return status report
 
 ## Phase 9: Middleware & Utilities
-- [ ] Create error handling middleware
-- [ ] Create logging middleware (request/response)
-- [ ] Create request validation middleware
+- [x] Create error handling middleware
+- [x] Create logging middleware (request/response)
+- [x] Create request validation middleware
 - [ ] Implement rate limiting (if needed)
 - [ ] Add CORS configuration
-- [ ] Create utility functions:
-  - [ ] Dice roll simulation
-  - [ ] Character stat calculation
-  - [ ] Response formatting
+- [x] Create utility functions:
+  - [x] Dice roll simulation
+  - [x] Character stat calculation
+  - [x] Response formatting
 
 ## Phase 10: Testing
 - [ ] Write unit tests for Groq service

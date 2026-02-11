@@ -2,6 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const requestLogger = require('./middleware/logger');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -9,6 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
 
 // Routes
 const adventuresRouter = require('./routes/adventures');
@@ -28,16 +32,16 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// 404 handler
+app.use(notFoundHandler);
+
 // Error handler
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
