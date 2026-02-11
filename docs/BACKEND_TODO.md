@@ -55,15 +55,15 @@
 - [ ] Test image generation for different scene types
 
 ## Phase 5: API Routes - Adventures
-- [ ] Create adventure routes (`routes/adventures.js`)
-- [ ] Implement `POST /api/adventures/generate`
-  - [ ] Validate input (theme, tone, difficulty)
-  - [ ] Call Groq service
-  - [ ] Generate images for scenes
-  - [ ] Save to database
-  - [ ] Return structured response
-- [ ] Implement `GET /api/adventures/:id`
-- [ ] Implement `GET /api/adventures` (list all)
+- [x] Create adventure routes (`routes/adventures.js`)
+- [x] Implement `POST /api/adventures/generate`
+  - [x] Validate input (theme, tone, difficulty)
+  - [x] Call Groq service
+  - [x] Generate images for scenes
+  - [x] Save to database
+  - [x] Return structured response
+- [x] Implement `GET /api/adventures/:id`
+- [x] Implement `GET /api/adventures` (list all)
 - [ ] Add input validation middleware
 
 ## Phase 6: API Routes - Game Play

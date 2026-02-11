@@ -11,17 +11,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
+const adventuresRouter = require('./routes/adventures');
+app.use('/api/adventures', adventuresRouter);
+
 app.get('/', (req, res) => {
   res.json({
     message: 'Dungeons & Dragons AI API',
     version: '1.0.0',
     status: 'running'
   });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
 // 404 handler
