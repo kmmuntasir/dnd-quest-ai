@@ -1,13 +1,56 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
+const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
 
 /**
  * GET /api/saved-games
- * List all saved games with metadata
+ * List all saved games with metadata (paginated)
+ * Query params:
+ * - page: Page number (default: 1)
+ * - limit: Items per page (default: 10, max: 100)
+ * - sortBy: Field to sort by (default: last_played)
+ * - sortOrder: ASC or DESC (default: DESC)
+ * - adventureId: Filter by adventure ID (optional)
+ * - difficulty: Filter by difficulty (optional)
  */
 router.get('/', (req, res) => {
   try {
+    const { page, limit, offset } = parsePagination(req.query);
+    const { sortBy = 'last_played', sortOrder = 'DESC', adventureId, difficulty } = req.query;
+
+    // Validate sort order
+    const validSortOrders = ['ASC', 'DESC'];
+    const validSortBy = ['last_played', 'created_at', 'character_name', 'gold'];
+    const order = validSortOrders.includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
+    const field = validSortBy.includes(sortBy) ? sortBy : 'last_played';
+
+    // Build query conditions
+    let conditions = [];
+    let params = [];
+
+    if (adventureId) {
+      conditions.push('a.id = ?');
+      params.push(adventureId);
+    }
+
+    if (difficulty) {
+      conditions.push('a.difficulty = ?');
+      params.push(difficulty);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM saved_games sg
+      JOIN adventures a ON sg.adventure_id = a.id
+      ${whereClause}
+    `;
+    const { total } = db.prepare(countQuery).get(...params);
+
+    // Get paginated results
     const savedGames = db.prepare(`
       SELECT
         sg.id,
@@ -23,10 +66,18 @@ router.get('/', (req, res) => {
         (SELECT COUNT(*) FROM scenes s WHERE s.adventure_id = a.id) as total_scenes
       FROM saved_games sg
       JOIN adventures a ON sg.adventure_id = a.id
-      ORDER BY sg.last_played DESC
-    `).all();
+      ${whereClause}
+      ORDER BY ${field} ${order}
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
 
-    res.json(savedGames);
+    // Build pagination metadata
+    const pagination = buildPaginationMeta(page, limit, total);
+
+    res.json({
+      data: savedGames,
+      pagination
+    });
   } catch (error) {
     console.error('Error fetching saved games:', error);
     res.status(500).json({

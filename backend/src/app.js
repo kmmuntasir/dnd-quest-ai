@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const requestLogger = require('./middleware/logger');
+const { logger, httpLogger } = require('./utils/logger');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(requestLogger);
+app.use(httpLogger);
 
 // Routes
 const adventuresRouter = require('./routes/adventures');
@@ -45,8 +45,11 @@ app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
+  logger.info('Server started', {
+    port: PORT,
+    environment: process.env.NODE_ENV,
+    nodeVersion: process.version
+  });
 });
 
 module.exports = app;

@@ -35,6 +35,11 @@ NODE_ENV=development
 ```
 Environment mode. Options: `development`, `production`, `staging`
 
+```env
+LOG_LEVEL=info
+```
+Logging level. Options: `error`, `warn`, `info`, `http`, `debug`, `silly`. Default: `info`
+
 ### Database Configuration
 ```env
 DATABASE_PATH=../database/dnd-game.db

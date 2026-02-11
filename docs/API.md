@@ -243,25 +243,61 @@ Manually save the game.
 ### Saved Games
 
 #### GET /api/saved-games
-List all saved games.
+List all saved games (paginated).
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 10, max: 100)
+- `sortBy` (optional): Field to sort by (default: last_played). Options: last_played, created_at, character_name, gold
+- `sortOrder` (optional): ASC or DESC (default: DESC)
+- `adventureId` (optional): Filter by adventure ID
+- `difficulty` (optional): Filter by difficulty (easy, medium, hard)
+
+**Examples:**
+```bash
+# Get first page (default)
+GET /api/saved-games
+
+# Get page 2 with 20 items per page
+GET /api/saved-games?page=2&limit=20
+
+# Sort by gold in ascending order
+GET /api/saved-games?sortBy=gold&sortOrder=ASC
+
+# Filter by adventure ID
+GET /api/saved-games?adventureId=1
+
+# Filter by difficulty
+GET /api/saved-games?difficulty=medium
+```
 
 **Response:**
 ```json
-[
-  {
-    "id": 1,
-    "character_name": "Aragorn",
-    "character_class": "Fighter",
-    "hp": 13,
-    "gold": 5,
-    "created_at": "2024-02-12T00:00:00.000Z",
-    "last_played": "2024-02-12T01:00:00.000Z",
-    "adventure_id": 1,
-    "adventure_title": "The Haunted Forest",
-    "difficulty": "medium",
-    "total_scenes": 5
+{
+  "data": [
+    {
+      "id": 1,
+      "character_name": "Aragorn",
+      "character_class": "Fighter",
+      "hp": 13,
+      "gold": 5,
+      "created_at": "2024-02-12T00:00:00.000Z",
+      "last_played": "2024-02-12T01:00:00.000Z",
+      "adventure_id": 1,
+      "adventure_title": "The Haunted Forest",
+      "difficulty": "medium",
+      "total_scenes": 5
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 25,
+    "totalPages": 3,
+    "hasNext": true,
+    "hasPrev": false
   }
-]
+}
 ```
 
 #### DELETE /api/saved-games/:id
