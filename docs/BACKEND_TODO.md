@@ -47,11 +47,11 @@
 - [ ] Test with sample adventure generation
 
 ## Phase 4: Pollinations.ai Integration
-- [ ] Create image service (`services/imageService.js`)
-- [ ] Research Pollinations.ai API documentation
-- [ ] Implement image generation function
-- [ ] Create prompt enhancement (add style keywords)
-- [ ] Implement error handling and fallback to placeholders
+- [x] Create image service (`services/imageService.js`)
+- [x] Research Pollinations.ai API documentation
+- [x] Implement image generation function
+- [x] Create prompt enhancement (add style keywords)
+- [x] Implement error handling and fallback to placeholders
 - [ ] Test image generation for different scene types
 
 ## Phase 5: API Routes - Adventures
