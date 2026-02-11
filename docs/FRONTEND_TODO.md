@@ -100,20 +100,20 @@
 - [ ] Add "Create Character & Start" button
 
 ## Phase 8: Game Play Interface
-- [ ] Create game layout:
-  - [ ] Left panel: Scene image
-  - [ ] Center: Narrative text
-  - [ ] Right panel: Choices
-- [ ] Scene presentation:
-  - [ ] Image with loading state
-  - [ ] Scene description text
-  - [ ] Scene title/location indicator
-- [ ] Character stats display (sidebar or header):
-  - [ ] Name, class
-  - [ ] HP bar
-  - [ ] Stats (STR, DEX, INT, WIS, CON, CHA)
-  - [ ] Gold
-- [ ] Inventory display (expandable)
+- [x] Create game layout:
+  - [x] Left panel: Character stats (desktop)
+  - [x] Center: Scene image + narrative
+  - [x] Right panel: Choices + dice roll
+- [x] Scene presentation:
+  - [x] Image with loading state
+  - [x] Scene description text
+  - [x] Scene title/location indicator
+- [x] Character stats display (sidebar or header):
+  - [x] Name, class
+  - [x] HP bar with percentage
+  - [x] Stats (STR, DEX, INT, WIS, CON, CHA)
+  - [x] Gold
+  - [x] Inventory display (expandable)
 
 ## Phase 9: Dice Rolling System
 - [ ] Create 3D d20 dice component
