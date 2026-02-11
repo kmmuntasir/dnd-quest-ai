@@ -7,6 +7,7 @@ import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { CharacterCreation } from './CharacterCreation';
 import { DiceRoller } from './DiceRoller';
 import { ChoicesList } from './Choices';
+import { FadeIn, SlideUp } from '../components/ui/Transitions';
 
 export function Game() {
   const { gameId } = useParams();
@@ -216,16 +217,22 @@ export function Game() {
           <div className="order-first lg:order-none">
             {/* Scene Image */}
             <div className="mb-6">
-              <div className="aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
-                <Image src={currentScene.image_url} alt={currentScene.description} />
-              </div>
+              <FadeIn delay={100}>
+                <div className="aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
+                  <Image src={currentScene.image_url} alt={currentScene.description} />
+                </div>
+              </FadeIn>
             </div>
 
             {/* Scene Narrative */}
-            <div className="bg-background-card p-8 rounded-2xl border border-background-input mb-6">
-              <p className="text-lg text-white leading-relaxed font-fantasy">
-                {currentScene.description}
-              </p>
+            <div className="mb-6">
+              <SlideUp delay={300}>
+                <div className="bg-background-card p-8 rounded-2xl border border-background-input">
+                  <p className="text-lg text-white leading-relaxed font-fantasy">
+                    {currentScene.description}
+                  </p>
+                </div>
+              </SlideUp>
             </div>
 
             {/* Scene Number */}

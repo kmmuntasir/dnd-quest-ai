@@ -136,10 +136,10 @@
 - [ ] Handle adventure completion
 
 ## Phase 11: Scene Transitions
-- [ ] Create fade-in/fade-out transitions
+- [x] Create fade-in/fade-out transitions
 - [ ] Add atmospheric effects (mist, particle overlay)
 - [ ] Scene loading animation
-- [ ] Smooth scroll to narrative text
+- [x] Smooth slide-up for narrative text
 - [ ] Progress indicator (scene X of Y)
 
 ## Phase 12: Save/Load System
