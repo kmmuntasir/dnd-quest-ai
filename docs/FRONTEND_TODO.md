@@ -151,22 +151,22 @@
 - [ ] Handle save conflicts (if game already exists)
 
 ## Phase 13: Settings Page
-- [ ] Create settings page with sections:
-  - [ ] AI Settings
-  - [ ] Game Settings
-  - [ ] Display Settings
-- [ ] AI Settings:
-  - [ ] Image style selector (realistic, fantasy art, cartoon)
-  - [ ] Difficulty toggle
-  - [ ] API connection test buttons
-- [ ] Game Settings:
-  - [ ] Dice animations toggle
-  - [ ] Sound effects toggle
+- [x] Create settings page with sections:
+  - [x] AI Settings
+  - [x] Game Settings
+  - [x] Display Settings
+- [x] AI Settings:
+  - [x] Image style selector (realistic, fantasy art, cartoon)
+  - [x] Difficulty toggle
+  - [x] API connection test buttons
+- [x] Game Settings:
+  - [x] Dice animations toggle
+  - [x] Sound effects toggle
   - [ ] Auto-save toggle
-- [ ] Display Settings:
+- [x] Display Settings:
   - [ ] Text size slider
   - [ ] High contrast toggle
-- [ ] Save settings with API call
+- [x] Save settings with API call
 
 ## Phase 14: State Management
 - [ ] Set up Zustand store (or Context API)
