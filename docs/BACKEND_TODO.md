@@ -86,9 +86,9 @@
 - [x] Add dice roll validation (must be 1-20)
 
 ## Phase 7: API Routes - Saved Games
-- [ ] Create saved game routes (`routes/savedGames.js`)
-- [ ] Implement `GET /api/saved-games` (list with metadata)
-- [ ] Implement `DELETE /api/saved-games/:id`
+- [x] Create saved game routes (`routes/savedGames.js`)
+- [x] Implement `GET /api/saved-games` (list with metadata)
+- [x] Implement `DELETE /api/saved-games/:id`
 - [ ] Add pagination support for saved games list
 - [ ] Add filtering by date, adventure, etc.
 
