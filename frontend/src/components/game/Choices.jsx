@@ -4,6 +4,15 @@ import { ChevronRight, Check } from 'lucide-react';
 export function ChoiceButton({ choice, index, selected, onSelect, disabled = false, variant = 'default' }) {
   const isSelected = selected === index;
   
+  const handleKeyDown = (e) => {
+    if (disabled) return;
+    
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelect(index);
+    }
+  };
+
   const variantStyles = {
     default: 'bg-background-dark/50 hover:bg-background-input',
     selected: 'bg-primary-default text-white',
@@ -13,7 +22,12 @@ export function ChoiceButton({ choice, index, selected, onSelect, disabled = fal
   return (
     <button
       onClick={() => onSelect(index)}
+      onKeyDown={handleKeyDown}
       disabled={disabled}
+      role="option"
+      aria-selected={isSelected}
+      aria-label={`Choice ${index + 1}: ${choice}`}
+      tabIndex={disabled ? -1 : 0}
       className={`group w-full text-left px-6 py-4 rounded-xl border border-background-input transition-all ${
         isSelected ? variantStyles.selected : variantStyles.default
       } ${variantStyles.hover} ${
@@ -51,8 +65,24 @@ export function ChoiceButton({ choice, index, selected, onSelect, disabled = fal
 }
 
 export function ChoicesList({ choices, onSelectChoice, disabled = false, selectedIndex = null }) {
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowUp' && selectedIndex !== null && selectedIndex > 0) {
+      e.preventDefault();
+      onSelectChoice(selectedIndex - 1);
+    } else if (e.key === 'ArrowDown' && choices && selectedIndex !== null && selectedIndex < choices.length - 1) {
+      e.preventDefault();
+      onSelectChoice(selectedIndex + 1);
+    }
+  };
+
   return (
-    <div className="space-y-3">
+    <div 
+      role="listbox"
+      aria-label="Game choices"
+      onKeyDown={handleKeyDown}
+      tabIndex={disabled ? -1 : 0}
+      className="space-y-3"
+    >
       {choices.map((choice, index) => (
         <ChoiceButton
           key={index}

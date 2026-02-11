@@ -226,6 +226,21 @@
 - [x] Responsive spacing and padding
 
 ## Phase 18: Accessibility
+- [x] Create accessible checkbox component
+- [x] Create focus trap hook (for modals)
+- [x] Add skip links for screen readers
+- [x] Add live regions for dynamic content
+- [x] Create visually hidden components
+- [x] Add ARIA labels to all interactive elements
+- [x] Implement keyboard navigation
+- [ ] Tab order
+- [ ] Arrow key navigation for choices
+- [ ] Space/Enter to select
+- [ ] Screen reader support
+- [ ] Descriptive alt text for images
+- [ ] Live regions for dynamic content
+- [ ] Color contrast compliance (WCAG AA)
+- [ ] Focus indicators
 - [ ] Add ARIA labels to all interactive elements
 - [ ] Implement keyboard navigation
   - [ ] Tab order

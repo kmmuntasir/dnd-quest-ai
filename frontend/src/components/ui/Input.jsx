@@ -8,6 +8,10 @@ export function Input({
   onChange,
   error = '',
   disabled = false,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedby,
+  'aria-invalid': ariaInvalid,
+  required = false,
   className = '',
   ...props
 }) {
@@ -15,8 +19,7 @@ export function Input({
     'w-full px-4 py-3 bg-background-input text-white rounded-lg border',
     error ? 'border-accent-red focus:border-accent-red' : 'border-background-input focus:border-primary-default',
     'focus:ring-2 focus:ring-primary-default/20 focus:outline-none transition-all',
-    'disabled:opacity-50 disabled:cursor-not-allowed',
-    className
+    'disabled:opacity-50 disabled:cursor-not-allowed'
   );
 
   return (
@@ -24,6 +27,7 @@ export function Input({
       {label && (
         <label className="block text-sm font-medium text-gray-300">
           {label}
+          {required && <span className="text-accent-red ml-1">*</span>}
         </label>
       )}
       <input
@@ -32,11 +36,15 @@ export function Input({
         value={value}
         onChange={onChange}
         disabled={disabled}
+        aria-label={ariaLabel || label}
+        aria-describedby={ariaDescribedby}
+        aria-invalid={ariaInvalid ? 'true' : 'false'}
+        aria-required={required ? 'true' : 'false'}
         className={inputStyles}
         {...props}
       />
       {error && (
-        <p className="text-sm text-accent-red">{error}</p>
+        <p className="text-sm text-accent-red" role="alert" aria-live="polite">{error}</p>
       )}
     </div>
   );
@@ -50,6 +58,9 @@ export function Textarea({
   error = '',
   disabled = false,
   rows = 4,
+  required = false,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedby,
   className = '',
   ...props
 }) {
@@ -57,8 +68,7 @@ export function Textarea({
     'w-full px-4 py-3 bg-background-input text-white rounded-lg border',
     error ? 'border-accent-red focus:border-accent-red' : 'border-background-input focus:border-primary-default',
     'focus:ring-2 focus:ring-primary-default/20 focus:outline-none transition-all resize-y',
-    'disabled:opacity-50 disabled:cursor-not-allowed',
-    className
+    'disabled:opacity-50 disabled:cursor-not-allowed'
   );
 
   return (
@@ -66,6 +76,7 @@ export function Textarea({
       {label && (
         <label className="block text-sm font-medium text-gray-300">
           {label}
+          {required && <span className="text-accent-red ml-1">*</span>}
         </label>
       )}
       <textarea
@@ -74,11 +85,14 @@ export function Textarea({
         onChange={onChange}
         disabled={disabled}
         rows={rows}
+        aria-label={ariaLabel || label}
+        aria-describedby={ariaDescribedby}
+        aria-required={required ? 'true' : 'false'}
         className={textareaStyles}
         {...props}
       />
       {error && (
-        <p className="text-sm text-accent-red">{error}</p>
+        <p className="text-sm text-accent-red" role="alert" aria-live="polite">{error}</p>
       )}
     </div>
   );
@@ -92,6 +106,8 @@ export function Select({
   error = '',
   disabled = false,
   placeholder = 'Select...',
+  required = false,
+  'aria-label': ariaLabel,
   className = '',
   ...props
 }) {
@@ -99,8 +115,7 @@ export function Select({
     'w-full px-4 py-3 bg-background-input text-white rounded-lg border',
     error ? 'border-accent-red focus:border-accent-red' : 'border-background-input focus:border-primary-default',
     'focus:ring-2 focus:ring-primary-default/20 focus:outline-none transition-all',
-    'disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer',
-    className
+    'disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
   );
 
   return (
@@ -108,12 +123,16 @@ export function Select({
       {label && (
         <label className="block text-sm font-medium text-gray-300">
           {label}
+          {required && <span className="text-accent-red ml-1">*</span>}
         </label>
       )}
       <select
         value={value}
         onChange={onChange}
         disabled={disabled}
+        aria-label={ariaLabel || label}
+        aria-describedby={ariaDescribedby}
+        aria-required={required ? 'true' : 'false'}
         className={selectStyles}
         {...props}
       >
@@ -125,7 +144,7 @@ export function Select({
         ))}
       </select>
       {error && (
-        <p className="text-sm text-accent-red">{error}</p>
+        <p className="text-sm text-accent-red" role="alert" aria-live="polite">{error}</p>
       )}
     </div>
   );

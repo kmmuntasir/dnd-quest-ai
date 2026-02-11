@@ -6,6 +6,8 @@ export function Button({
   size = 'md',
   disabled = false,
   loading = false,
+  'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedby,
   className = '',
   ...props
 }) {
@@ -37,6 +39,9 @@ export function Button({
     <button
       className={classes}
       disabled={disabled || loading}
+      aria-label={ariaLabel}
+      aria-describedby={ariaDescribedby}
+      aria-busy={loading}
       {...props}
     >
       {loading ? (
