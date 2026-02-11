@@ -1,19 +1,19 @@
 # Frontend Todo List
 
 ## Phase 1: Project Setup
-- [ ] Create React + Vite project
-- [ ] Install dependencies:
-  - [ ] `react-router-dom`
-  - [ ] `axios`
-  - [ ] `zustand` (or Context API for state)
-  - [ ] `lucide-react` (icons)
-  - [ ] `clsx` and `tailwind-merge` (utility classes)
-- [ ] Configure Tailwind CSS:
-  - [ ] Install `tailwindcss`
-  - [ ] Create `tailwind.config.js`
-  - [ ] Add custom colors (dark theme palette)
-  - [ ] Configure Google Fonts (Cinzel, MedievalSharp)
-- [ ] Set up project structure:
+- [x] Create React + Vite project
+- [x] Install dependencies:
+  - [x] `react-router-dom`
+  - [x] `axios`
+  - [x] `zustand` (or Context API for state)
+  - [x] `lucide-react` (icons)
+  - [x] `clsx` and `tailwind-merge` (utility classes)
+- [x] Configure Tailwind CSS:
+  - [x] Install `tailwindcss`
+  - [x] Create `tailwind.config.js`
+  - [x] Add custom colors (dark theme palette)
+  - [x] Configure Google Fonts (Cinzel, MedievalSharp)
+- [x] Set up project structure:
   ```
   frontend/
   ├── src/
@@ -30,7 +30,7 @@
   │   └── main.jsx
   └── package.json
   ```
-- [ ] Configure ESLint and Prettier
+- [x] Configure ESLint and Prettier
 
 ## Phase 2: Routing & Layout
 - [ ] Set up React Router
