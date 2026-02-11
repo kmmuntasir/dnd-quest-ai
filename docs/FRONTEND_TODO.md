@@ -33,15 +33,15 @@
 - [x] Configure ESLint and Prettier
 
 ## Phase 2: Routing & Layout
-- [ ] Set up React Router
-- [ ] Create main layout component with navigation
-- [ ] Define routes:
-  - [ ] `/` - Home/Landing
-  - [ ] `/library` - Story Library
-  - [ ] `/game/:gameId` - Game Play
-  - [ ] `/settings` - Settings
-- [ ] Create navigation component
-- [ ] Add 404 page
+- [x] Set up React Router
+- [x] Create main layout component with navigation
+- [x] Define routes:
+  - [x] `/` - Home/Landing
+  - [x] `/library` - Story Library
+  - [x] `/game/:gameId` - Game Play
+  - [x] `/settings` - Settings
+- [x] Create navigation component
+- [x] Add 404 page
 
 ## Phase 3: UI Components - Common
 - [ ] Button component (variants: primary, secondary, danger)
