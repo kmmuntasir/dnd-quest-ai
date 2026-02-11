@@ -1,14 +1,14 @@
 # Backend Todo List
 
 ## Phase 1: Project Setup
-- [ ] Initialize Express project with npm init
-- [ ] Install core dependencies:
-  - [ ] `express`
-  - [ ] `cors`
-  - [ ] `dotenv`
-  - [ ] `better-sqlite3` (or `sqlite3`)
-  - [ ] `axios` (for Groq API calls)
-- [ ] Set up project structure:
+- [x] Initialize Express project with npm init
+- [x] Install core dependencies:
+  - [x] `express`
+  - [x] `cors`
+  - [x] `dotenv`
+  - [x] `better-sqlite3` (or `sqlite3`)
+  - [x] `axios` (for Groq API calls)
+- [x] Set up project structure:
   ```
   backend/
   ├── src/
@@ -22,8 +22,8 @@
   ├── .env
   └── package.json
   ```
-- [ ] Configure nodemon for development
-- [ ] Set up ESLint for code quality
+- [x] Configure nodemon for development
+- [x] Set up ESLint for code quality
 
 ## Phase 2: Database Setup
 - [ ] Initialize SQLite database
