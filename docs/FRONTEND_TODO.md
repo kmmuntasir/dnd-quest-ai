@@ -44,14 +44,14 @@
 - [x] Add 404 page
 
 ## Phase 3: UI Components - Common
-- [ ] Button component (variants: primary, secondary, danger)
-- [ ] Card component
-- [ ] Modal/Dialog component
-- [ ] Loading spinner component
-- [ ] Skeleton loader component
-- [ ] Toast/Notification component
-- [ ] Input components (text, select, textarea)
-- [ ] Image component with fallback
+- [x] Button component (variants: primary, secondary, danger)
+- [x] Card component
+- [x] Modal/Dialog component
+- [x] Loading spinner component
+- [x] Skeleton loader component
+- [x] Toast/Notification component
+- [x] Input components (text, select, textarea)
+- [x] Image component with fallback
 
 ## Phase 4: Home/Landing Page
 - [ ] Create hero section with fantasy theme
