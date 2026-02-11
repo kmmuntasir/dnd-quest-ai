@@ -143,11 +143,11 @@
 - [ ] Progress indicator (scene X of Y)
 
 ## Phase 12: Save/Load System
-- [ ] Implement auto-save (after each scene)
-- [ ] Create manual save button
-- [ ] Add save notification (toast)
-- [ ] Create save slots display (in settings or separate page)
-- [ ] Load saved game functionality
+- [x] Implement auto-save (after each scene)
+- [x] Create manual save button
+- [x] Add save notification (toast)
+- [x] Create save slots display (in settings or separate page)
+- [x] Load saved game functionality
 - [ ] Handle save conflicts (if game already exists)
 
 ## Phase 13: Settings Page
