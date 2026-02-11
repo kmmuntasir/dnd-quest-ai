@@ -86,17 +86,17 @@
 - [ ] Add empty state when no saves
 
 ## Phase 7: Character Creation
-- [ ] Create character creation modal/page
-- [ ] Add name input
-- [ ] Add class selection:
-  - [ ] Fighter
-  - [ ] Wizard
-  - [ ] Rogue
-  - [ ] Cleric
-  - [ ] Ranger
-- [ ] Display class descriptions and bonuses
-- [ ] Show randomized stats (3d6) with option to reroll
-- [ ] Display calculated HP based on class + CON
+- [x] Create character creation modal/page
+- [x] Add name input
+- [x] Add class selection:
+  - [x] Fighter
+  - [x] Wizard
+  - [x] Rogue
+  - [x] Cleric
+  - [x] Ranger
+- [x] Display class descriptions and bonuses
+- [x] Show randomized stats (3d6) with option to reroll
+- [x] Display calculated HP based on class + CON
 - [ ] Add "Create Character & Start" button
 
 ## Phase 8: Game Play Interface
