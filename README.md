@@ -5,7 +5,7 @@ An immersive D&D-style RPG where AI dynamically generates adventures, stories, a
 ## Overview
 
 Play through AI-generated fantasy adventures with:
-- **Dynamic Storytelling** - Ollama-powered LLM creates unique adventures
+- **Dynamic Storytelling** - Groq-powered Llama 3.3 70B creates unique adventures
 - **Atmospheric Visuals** - AI-generated images via Pollinations.ai
 - **Replayability** - Branching paths and saved games
 - **Simple D&D Mechanics** - Character stats, dice rolls, choices matter
@@ -14,20 +14,15 @@ Play through AI-generated fantasy adventures with:
 
 - **Frontend:** React.js + Vite + Tailwind CSS
 - **Backend:** Express.js + SQLite
-- **AI Services:** Ollama (local) + Pollinations.ai
+- **AI Services:** Groq API (Llama 3.3 70B) + Pollinations.ai API
 
 ## Getting Started
 
 ### Prerequisites
 
 1. **Node.js** (v18+)
-2. **Ollama** running locally on `http://localhost:11434`
-3. **Ollama model installed:**
-   ```bash
-   ollama pull llama3.2
-   # or
-   ollama pull mistral
-   ```
+2. **Groq API key** (free tier) - Get from https://console.groq.com/
+3. **Pollinations.ai API key** (free tier) - Get from https://enter.pollinations.ai/
 
 ### Installation
 
@@ -47,8 +42,9 @@ npm run dev
 
 Create `.env`:
 ```
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+POLLINATIONS_API_KEY=your_pollinations_api_key_here
 PORT=3000
 ```
 
@@ -83,7 +79,7 @@ PORT=3000
 - [x] Project planning (PRD)
 - [ ] Frontend setup (React + Vite)
 - [ ] Backend setup (Express + SQLite)
-- [ ] Ollama integration
+- [ ] Groq API integration
 - [ ] Pollinations.ai integration
 - [ ] Story generation flow
 - [ ] Gameplay engine
