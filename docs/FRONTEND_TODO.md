@@ -169,19 +169,19 @@
 - [x] Save settings with API call
 
 ## Phase 14: State Management
-- [ ] Set up Zustand store (or Context API)
-- [ ] Create game state structure:
-  - [ ] Current adventure
-  - [ ] Current scene
-  - [ ] Character data
-  - [ ] Game history (choices, rolls)
-  - [ ] Settings
-- [ ] Implement actions:
-  - [ ] setAdventure
-  - [ ] updateCharacter
-  - [ ] addToHistory
-  - [ ] updateSettings
-- [ ] Create selectors for derived state
+- [x] Set up Zustand store (or Context API)
+- [x] Create game state structure:
+  - [x] Current adventure
+  - [x] Current scene
+  - [x] Character data
+  - [x] Game history (choices, rolls)
+  - [x] Settings
+- [x] Implement actions:
+  - [x] setAdventure
+  - [x] updateCharacter
+  - [x] addToHistory
+  - [x] updateSettings
+- [x] Create selectors for derived state
 
 ## Phase 15: API Integration
 - [ ] Create API service (`services/api.js`)
