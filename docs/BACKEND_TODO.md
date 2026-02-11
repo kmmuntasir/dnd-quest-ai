@@ -26,14 +26,14 @@
 - [x] Set up ESLint for code quality
 
 ## Phase 2: Database Setup
-- [ ] Initialize SQLite database
-- [ ] Create database schema:
-  - [ ] `adventures` table
-  - [ ] `scenes` table
-  - [ ] `npcs` table
-  - [ ] `saved_games` table
-  - [ ] `settings` table
-- [ ] Create database initialization script
+- [x] Initialize SQLite database
+- [x] Create database schema:
+  - [x] `adventures` table
+  - [x] `scenes` table
+  - [x] `npcs` table
+  - [x] `saved_games` table
+  - [x] `settings` table
+- [x] Create database initialization script
 - [ ] Implement database connection pooling
 - [ ] Add database migration system (for future updates)
 
