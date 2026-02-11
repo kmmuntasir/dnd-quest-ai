@@ -93,16 +93,16 @@
 - [ ] Add filtering by date, adventure, etc.
 
 ## Phase 8: API Routes - Settings
-- [ ] Create settings routes (`routes/settings.js`)
-- [ ] Implement `GET /api/settings`
-  - [ ] Return current settings from database
-- [ ] Implement `PUT /api/settings`
-  - [ ] Validate input
-  - [ ] Update settings in database
-- [ ] Implement `GET /api/ai/test`
-  - [ ] Test Groq API connection
-  - [ ] Test Pollinations.ai connection
-  - [ ] Return status report
+- [x] Create settings routes (`routes/settings.js`)
+- [x] Implement `GET /api/settings`
+  - [x] Return current settings from database
+- [x] Implement `PUT /api/settings`
+  - [x] Validate input
+  - [x] Update settings in database
+- [x] Implement `GET /api/ai/test`
+  - [x] Test Groq API connection
+  - [x] Test Pollinations.ai connection
+  - [x] Return status report
 
 ## Phase 9: Middleware & Utilities
 - [ ] Create error handling middleware

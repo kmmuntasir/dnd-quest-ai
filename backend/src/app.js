@@ -14,9 +14,11 @@ app.use(express.urlencoded({ extended: true }));
 const adventuresRouter = require('./routes/adventures');
 const gamesRouter = require('./routes/games');
 const savedGamesRouter = require('./routes/savedGames');
+const settingsRouter = require('./routes/settings');
 app.use('/api/adventures', adventuresRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/saved-games', savedGamesRouter);
+app.use('/api/settings', settingsRouter);
 
 app.get('/', (req, res) => {
   res.json({
