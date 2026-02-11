@@ -62,12 +62,12 @@
 - [x] Responsive design (mobile-first)
 
 ## Phase 5: Story Generator Page
-- [ ] Create form for adventure parameters:
-  - [ ] Theme dropdown (fantasy, horror, sci-fi, etc.)
-  - [ ] Tone dropdown (serious, humorous, dark)
-  - [ ] Difficulty selector (easy, medium, hard)
-  - [ ] Custom context textarea
-- [ ] Add loading state with animation
+- [x] Create form for adventure parameters:
+  - [x] Theme dropdown (fantasy, horror, sci-fi, etc.)
+  - [x] Tone dropdown (serious, humorous, dark)
+  - [x] Difficulty selector (easy, medium, hard)
+  - [x] Custom context textarea
+- [x] Add loading state with animation
 - [ ] Create generated adventure preview
 - [ ] Add "Start Adventure" button
 - [ ] Add "Regenerate" option
