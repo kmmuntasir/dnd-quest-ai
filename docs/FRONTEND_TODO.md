@@ -116,14 +116,14 @@
   - [x] Inventory display (expandable)
 
 ## Phase 9: Dice Rolling System
-- [ ] Create 3D d20 dice component
-- [ ] Implement dice roll animation:
-  - [ ] Spinning effect
+- [x] Create 3D d20 dice component
+- [x] Implement dice roll animation:
+  - [x] Spinning effect
   - [ ] Sound effect (optional)
-  - [ ] Roll result display
+  - [x] Roll result display
 - [ ] Add automatic roll on choice selection
 - [ ] Display roll modifier (stat bonus)
-- [ ] Show success/failure indication
+- [x] Show success/failure indication (natural 20/1)
 - [ ] Add manual roll button (for skill checks)
 
 ## Phase 10: Choice System

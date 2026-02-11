@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Image } from '../components/ui/Image';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { CharacterCreation } from './CharacterCreation';
+import { DiceRoller } from './DiceRoller';
 
 export function Game() {
   const { gameId } = useParams();
@@ -272,9 +273,7 @@ export function Game() {
                 <p className="text-sm text-gray-400 text-center mb-4">
                   Select an option above, then roll the d20 to determine your outcome
                 </p>
-                <button className="w-full px-6 py-4 bg-primary-default hover:bg-primary-hover text-white rounded-xl font-display text-lg font-bold transition-all transform hover:scale-105 shadow-lg">
-                  Roll d20
-                </button>
+                <DiceRoller onRoll={(value) => console.log('Rolled:', value)} />
               </div>
             </Card>
 
