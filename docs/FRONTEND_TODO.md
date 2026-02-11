@@ -54,12 +54,12 @@
 - [x] Image component with fallback
 
 ## Phase 4: Home/Landing Page
-- [ ] Create hero section with fantasy theme
-- [ ] Add "Generate New Adventure" CTA button
-- [ ] Add "Story Library" CTA button
-- [ ] Create recent adventures preview
-- [ ] Add atmospheric background/dark theme
-- [ ] Responsive design (mobile-first)
+- [x] Create hero section with fantasy theme
+- [x] Add "Generate New Adventure" CTA button
+- [x] Add "Story Library" CTA button
+- [x] Create recent adventures preview
+- [x] Add atmospheric background/dark theme
+- [x] Responsive design (mobile-first)
 
 ## Phase 5: Story Generator Page
 - [ ] Create form for adventure parameters:
