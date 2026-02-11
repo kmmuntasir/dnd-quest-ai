@@ -127,9 +127,9 @@
 - [ ] Add manual roll button (for skill checks)
 
 ## Phase 10: Choice System
-- [ ] Create choice button component
-- [ ] Add hover effects and animations
-- [ ] Implement choice selection
+- [x] Create choice button component
+- [x] Add hover effects and animations
+- [x] Implement choice selection
 - [ ] Show dice roll result on selection
 - [ ] Display AI-generated outcome
 - [ ] Navigate to next scene

@@ -6,6 +6,7 @@ import { Image } from '../components/ui/Image';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { CharacterCreation } from './CharacterCreation';
 import { DiceRoller } from './DiceRoller';
+import { ChoicesList } from './Choices';
 
 export function Game() {
   const { gameId } = useParams();
@@ -14,6 +15,7 @@ export function Game() {
   const [character, setCharacter] = useState(null);
   const [currentScene, setCurrentScene] = useState(null);
   const [showCharacterCreation, setShowCharacterCreation] = useState(false);
+  const [selectedChoice, setSelectedChoice] = useState(null);
 
   useEffect(() => {
     loadGame();
@@ -244,23 +246,11 @@ export function Game() {
                   <Swords className="w-6 h-6 text-accent-gold" />
                   Your Choice
                 </h3>
-                <div className="space-y-3">
-                  {currentScene.choices.map((choice, index) => (
-                    <button
-                      key={index}
-                      className="w-full text-left px-4 py-4 bg-background-dark/50 hover:bg-background-input text-white rounded-lg border border-background-input hover:border-primary-default transition-all group"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-6 h-6 rounded bg-background-input flex items-center justify-center text-sm font-bold text-gray-400 group-hover:bg-primary-default group-hover:text-white transition-colors">
-                          {index + 1}
-                        </div>
-                        <span className="text-left">
-                          {choice}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <ChoicesList
+                  choices={currentScene.choices}
+                  onSelectChoice={setSelectedChoice}
+                  selectedIndex={selectedChoice}
+                />
               </div>
             </Card>
 
@@ -273,7 +263,7 @@ export function Game() {
                 <p className="text-sm text-gray-400 text-center mb-4">
                   Select an option above, then roll the d20 to determine your outcome
                 </p>
-                <DiceRoller onRoll={(value) => console.log('Rolled:', value)} />
+                <DiceRoller onRoll={(value) => console.log('Rolled:', value)} disabled={selectedChoice === null} />
               </div>
             </Card>
 
