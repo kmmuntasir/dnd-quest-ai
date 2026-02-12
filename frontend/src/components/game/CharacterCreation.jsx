@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import axios from 'axios';
 import { User, Shield, Wand, Eye, Heart, Swords } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardFooter } from '../ui/Card';
 import { LoadingSpinner, LoadingPage } from '../ui/LoadingSpinner';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const classes = [
   {
@@ -86,23 +89,24 @@ export function CharacterCreation() {
 
   const handleCreateCharacter = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name.trim()) {
-      // TODO: Show error toast
+      alert('Please enter a character name');
       return;
     }
 
     try {
-      // TODO: Call backend API
-      // await axios.post('/api/games/start', {
-      //   adventureId,
-      //   characterName: formData.name,
-      //   characterClass: formData.class
-      // });
-      
-      navigate(`/game/new`);
+      const response = await axios.post(`${API_BASE_URL}/games/start`, {
+        adventureId,
+        characterName: formData.name,
+        characterClass: formData.class
+      });
+
+      // Navigate to the game with the returned game ID
+      navigate(`/game/${response.data.gameId}`, { replace: true });
     } catch (error) {
       console.error('Failed to create character:', error);
+      alert(error.response?.data?.error || 'Failed to create character. Please try again.');
     }
   };
 

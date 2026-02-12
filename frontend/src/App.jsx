@@ -5,6 +5,7 @@ import { Game } from './pages/Game';
 import { Settings } from './pages/Settings';
 import { Layout } from './components/common/Layout';
 import { NotFound } from './components/common/NotFound';
+import { CharacterCreation } from './components/game/CharacterCreation';
 
 const router = createBrowserRouter([
   {
@@ -13,6 +14,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'library', element: <Library /> },
+      { path: 'create-character/:adventureId', element: <CharacterCreation /> },
       { path: 'game/:gameId', element: <Game /> },
       { path: 'settings', element: <Settings /> }
     ]

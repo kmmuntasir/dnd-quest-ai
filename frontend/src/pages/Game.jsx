@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import axios from 'axios';
 import { Swords, Heart, Coins, Backpack } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Image } from '../components/ui/Image';
@@ -8,6 +9,8 @@ import { CharacterCreation } from '../components/game/CharacterCreation';
 import { DiceRoller } from '../components/game/DiceRoller';
 import { ChoicesList } from '../components/game/Choices';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export function Game() {
   const { gameId } = useParams();
@@ -24,38 +27,25 @@ export function Game() {
 
   const loadGame = async () => {
     try {
-      // TODO: Call backend API
-      // const response = await axios.get(`/api/games/${gameId}`);
-      // setGame(response.data);
-      
-      // For now, mock data
-      setTimeout(() => {
-        setCharacter({
-          name: 'Aragorn',
-          class: 'Fighter',
-          stats: { STR: 14, DEX: 12, INT: 10, WIS: 11, CON: 13, CHA: 9 },
-          hp: 13,
-          maxHp: 13,
-          inventory: ['Health Potion', 'Steel Sword'],
-          gold: 25
-        });
-        setCurrentScene({
-          id: 1,
-          description: 'You stand at the edge of an ancient forest. The trees tower above you, their branches creating a canopy that blocks most of the sunlight. A narrow path winds into the darkness ahead. You hear the distant sound of howling wolves.',
-          image_url: 'https://via.placeholder.com/1024x576/4a1c6b/ffffff?text=Forest+Scene',
-          choices: [
-            'Enter the forest cautiously',
-            'Look for another way around',
-            'Return to the village',
-            'Light a torch and proceed'
-          ],
-          is_key_scene: true
-        });
-        setLoading(false);
-      }, 1000);
+      const response = await axios.get(`${API_BASE_URL}/games/${gameId}`);
+      const data = response.data;
+
+      setGame(data);
+      setCharacter({
+        name: data.character.name,
+        class: data.character.class,
+        stats: data.character.stats,
+        hp: data.character.hp,
+        maxHp: data.character.hp,
+        inventory: data.character.inventory,
+        gold: data.character.gold
+      });
+      setCurrentScene(data.scene);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to load game:', error);
       setLoading(false);
+      alert(error.response?.data?.error || 'Failed to load game. Please try again.');
     }
   };
 
