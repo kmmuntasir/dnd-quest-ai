@@ -1,5 +1,8 @@
 const axios = require('axios');
 
+// API key for Pollinations.ai (removes watermark when provided)
+const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY;
+
 // App referrer for Pollinations.ai API identification
 const APP_REFERRER = 'dungeons-and-dragons-rpg';
 
@@ -20,15 +23,37 @@ async function generateImage(prompt, options = {}) {
 
   try {
     // Pollinations.ai generates images via GET request with prompt in URL
-    // Using referrer for app identification (no auth required)
-    // Using enhance=true for better prompt processing
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
     const seed = Math.floor(Math.random() * 1000000);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&enhance=true&referrer=${APP_REFERRER}&model=flux`;
+
+    // Build URL with parameters
+    const params = new URLSearchParams({
+      width: width.toString(),
+      height: height.toString(),
+      seed: seed.toString(),
+      enhance: 'true',
+      model: 'flux',
+      referrer: APP_REFERRER
+    });
+
+    // Add nologo if API key is available (removes watermark)
+    if (POLLINATIONS_API_KEY) {
+      params.append('nologo', 'true');
+      params.append('token', POLLINATIONS_API_KEY);
+    }
+
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?${params.toString()}`;
 
     // Test if the image is accessible (with timeout)
-    const response = await axios.head(imageUrl, {
+    // Include Authorization header if API key is available
+    const headers = {};
+    if (POLLINATIONS_API_KEY) {
+      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
+    }
+
+    await axios.head(imageUrl, {
       timeout: 15000,
+      headers,
       validateStatus: (status) => status === 200
     });
 
@@ -77,9 +102,29 @@ async function generateNPCPortrait(npc, style = 'fantasy art') {
  */
 async function testConnection() {
   try {
-    const testUrl = `https://image.pollinations.ai/prompt/test?width=512&height=512&referrer=${APP_REFERRER}`;
+    const params = new URLSearchParams({
+      width: '512',
+      height: '512',
+      referrer: APP_REFERRER
+    });
+
+    // Add nologo if API key is available (removes watermark)
+    if (POLLINATIONS_API_KEY) {
+      params.append('nologo', 'true');
+      params.append('token', POLLINATIONS_API_KEY);
+    }
+
+    const testUrl = `https://image.pollinations.ai/prompt/test?${params.toString()}`;
+
+    // Include Authorization header if API key is available
+    const headers = {};
+    if (POLLINATIONS_API_KEY) {
+      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
+    }
+
     await axios.head(testUrl, {
       timeout: 15000,
+      headers,
       validateStatus: (status) => status === 200
     });
     return true;
