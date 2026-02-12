@@ -302,6 +302,9 @@ router.post('/:id/choice', async (req, res) => {
       LIMIT 1
     `).get(savedGame.adventure_id, scene.scene_order);
 
+    console.log('Current scene order:', scene.scene_order);
+    console.log('Next scene found:', nextScene ? `Scene ${nextScene.scene_order}` : 'None');
+
     let nextSceneData = null;
     let isGameOver = false;
     let isVictory = false;
