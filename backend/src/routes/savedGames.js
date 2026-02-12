@@ -2,15 +2,16 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
+const { logger } = require('../utils/logger');
 
 /**
  * GET /api/saved-games/adventures
  * List unique adventures that have been played, with game count
  */
-router.get('/adventures', (req, res) => {
+router.get('/adventures', async (req, res) => {
   try {
     // Get unique adventures with their game count and most recent play
-    const adventures = db.prepare(`
+    const adventures = await db.all(`
       SELECT
         a.id as adventure_id,
         a.title,
@@ -25,11 +26,11 @@ router.get('/adventures', (req, res) => {
       JOIN saved_games sg ON sg.adventure_id = a.id
       GROUP BY a.id
       ORDER BY last_played DESC
-    `).all();
+    `);
 
     res.json({ data: adventures });
   } catch (error) {
-    console.error('Error fetching adventures:', error);
+    logger.error('Error fetching adventures', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch adventures',
       details: error.message
@@ -41,11 +42,11 @@ router.get('/adventures', (req, res) => {
  * GET /api/saved-games/adventures/:adventureId/games
  * Get all game instances for a specific adventure
  */
-router.get('/adventures/:adventureId/games', (req, res) => {
+router.get('/adventures/:adventureId/games', async (req, res) => {
   try {
     const { adventureId } = req.params;
 
-    const games = db.prepare(`
+    const games = await db.all(`
       SELECT
         sg.id,
         sg.character_name,
@@ -63,7 +64,7 @@ router.get('/adventures/:adventureId/games', (req, res) => {
       FROM saved_games sg
       WHERE sg.adventure_id = ?
       ORDER BY sg.last_played DESC
-    `).all(adventureId);
+    `, [adventureId]);
 
     // Parse JSON fields and add computed fields
     const gamesWithDetails = games.map(game => {
@@ -84,7 +85,7 @@ router.get('/adventures/:adventureId/games', (req, res) => {
 
     res.json({ data: gamesWithDetails });
   } catch (error) {
-    console.error('Error fetching adventure games:', error);
+    logger.error('Error fetching adventure games', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch adventure games',
       details: error.message
@@ -103,7 +104,7 @@ router.get('/adventures/:adventureId/games', (req, res) => {
  * - adventureId: Filter by adventure ID (optional)
  * - difficulty: Filter by difficulty (optional)
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query);
     const { sortBy = 'last_played', sortOrder = 'DESC', adventureId, difficulty } = req.query;
@@ -137,10 +138,11 @@ router.get('/', (req, res) => {
       JOIN adventures a ON sg.adventure_id = a.id
       ${whereClause}
     `;
-    const { total } = db.prepare(countQuery).get(...params);
+    const countResult = await db.get(countQuery, params);
+    const total = countResult.total;
 
     // Get paginated results with scene image
-    const savedGames = db.prepare(`
+    const savedGames = await db.all(`
       SELECT
         sg.id,
         sg.character_name,
@@ -162,7 +164,7 @@ router.get('/', (req, res) => {
       ${whereClause}
       ORDER BY ${field} ${order}
       LIMIT ? OFFSET ?
-    `).all(...params, limit, offset);
+    `, [...params, limit, offset]);
 
     // Build pagination metadata
     const pagination = buildPaginationMeta(page, limit, total);
@@ -172,7 +174,7 @@ router.get('/', (req, res) => {
       pagination
     });
   } catch (error) {
-    console.error('Error fetching saved games:', error);
+    logger.error('Error fetching saved games', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch saved games',
       details: error.message
@@ -184,23 +186,23 @@ router.get('/', (req, res) => {
  * DELETE /api/saved-games/:id
  * Delete a saved game
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
     // Check if game exists
-    const game = db.prepare('SELECT id FROM saved_games WHERE id = ?').get(id);
+    const game = await db.get('SELECT id FROM saved_games WHERE id = ?', [id]);
 
     if (!game) {
       return res.status(404).json({ error: 'Saved game not found' });
     }
 
     // Delete game
-    db.prepare('DELETE FROM saved_games WHERE id = ?').run(id);
+    await db.run('DELETE FROM saved_games WHERE id = ?', [id]);
 
     res.json({ success: true, message: 'Saved game deleted successfully' });
   } catch (error) {
-    console.error('Error deleting saved game:', error);
+    logger.error('Error deleting saved game', { error: error.message });
     res.status(500).json({
       error: 'Failed to delete saved game',
       details: error.message

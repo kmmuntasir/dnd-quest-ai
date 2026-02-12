@@ -65,28 +65,28 @@ function verifyToken(token) {
  */
 async function createUser(username, email, password) {
   // Check if username already exists
-  const existingUsername = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existingUsername = await db.get('SELECT id FROM users WHERE username = ?', [username]);
   if (existingUsername) {
     throw new Error('Username already exists');
   }
 
   // Check if email already exists
-  const existingEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const existingEmail = await db.get('SELECT id FROM users WHERE email = ?', [email]);
   if (existingEmail) {
     throw new Error('Email already exists');
   }
 
   // Hash password and create user
   const passwordHash = await hashPassword(password);
-  const result = db.prepare(`
+  const result = await db.run(`
     INSERT INTO users (username, email, password_hash)
     VALUES (?, ?, ?)
-  `).run(username, email, passwordHash);
+  `, [username, email, passwordHash]);
 
-  logger.info('User created', { userId: result.lastInsertRowid, username, email });
+  logger.info('User created', { userId: result.lastID, username, email });
 
   return {
-    id: result.lastInsertRowid,
+    id: result.lastID,
     username,
     email
   };
@@ -100,7 +100,7 @@ async function createUser(username, email, password) {
  */
 async function authenticateUser(email, password) {
   // Find user by email
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
   if (!user) {
     return null;
   }
@@ -112,7 +112,7 @@ async function authenticateUser(email, password) {
   }
 
   // Update last login
-  db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+  await db.run('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
 
   logger.info('User authenticated', { userId: user.id, username: user.username });
 
@@ -127,30 +127,30 @@ async function authenticateUser(email, password) {
 /**
  * Get user by ID
  * @param {number} id - User ID
- * @returns {object|null} User object (without password hash)
+ * @returns {Promise<object|null>} User object (without password hash)
  */
-function getUserById(id) {
-  const user = db.prepare('SELECT id, username, email, created_at, last_login FROM users WHERE id = ?').get(id);
+async function getUserById(id) {
+  const user = await db.get('SELECT id, username, email, created_at, last_login FROM users WHERE id = ?', [id]);
   return user || null;
 }
 
 /**
  * Get user by email
  * @param {string} email - Email address
- * @returns {object|null} User object (without password hash)
+ * @returns {Promise<object|null>} User object (without password hash)
  */
-function getUserByEmail(email) {
-  const user = db.prepare('SELECT id, username, email, created_at, last_login FROM users WHERE email = ?').get(email);
+async function getUserByEmail(email) {
+  const user = await db.get('SELECT id, username, email, created_at, last_login FROM users WHERE email = ?', [email]);
   return user || null;
 }
 
 /**
  * Get user by username
  * @param {string} username - Username
- * @returns {object|null} User object (without password hash)
+ * @returns {Promise<object|null>} User object (without password hash)
  */
-function getUserByUsername(username) {
-  const user = db.prepare('SELECT id, username, email, created_at, last_login FROM users WHERE username = ?').get(username);
+async function getUserByUsername(username) {
+  const user = await db.get('SELECT id, username, email, created_at, last_login FROM users WHERE username = ?', [username]);
   return user || null;
 }
 
@@ -162,7 +162,7 @@ function getUserByUsername(username) {
  * @returns {Promise<boolean>} True if password changed successfully
  */
 async function changePassword(userId, currentPassword, newPassword) {
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [userId]);
   if (!user) {
     throw new Error('User not found');
   }
@@ -175,7 +175,7 @@ async function changePassword(userId, currentPassword, newPassword) {
 
   // Update password
   const newPasswordHash = await hashPassword(newPassword);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newPasswordHash, userId);
+  await db.run('UPDATE users SET password_hash = ? WHERE id = ?', [newPasswordHash, userId]);
 
   logger.info('Password changed', { userId });
 

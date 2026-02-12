@@ -3,14 +3,15 @@ const router = express.Router();
 const db = require('../config/database');
 const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
+const { logger } = require('../utils/logger');
 
 /**
  * GET /api/settings
  * Get current user settings
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+    const settings = await db.get('SELECT * FROM settings WHERE id = 1');
 
     if (!settings) {
       return res.status(404).json({ error: 'Settings not found' });
@@ -22,7 +23,7 @@ router.get('/', (req, res) => {
       diceAnimations: Boolean(settings.dice_animations)
     });
   } catch (error) {
-    console.error('Error fetching settings:', error);
+    logger.error('Error fetching settings', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch settings',
       details: error.message
@@ -34,7 +35,7 @@ router.get('/', (req, res) => {
  * PUT /api/settings
  * Update user settings
  */
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   try {
     const { imageStyle, difficulty, diceAnimations } = req.body;
 
@@ -63,15 +64,15 @@ router.put('/', (req, res) => {
 
     values.push(1); // for WHERE id = 1
 
-    db.prepare(`
+    await db.run(`
       UPDATE settings
       SET ${updates.join(', ')}
       WHERE id = ?
-    `).run(...values);
+    `, values);
 
     res.json({ success: true, message: 'Settings updated successfully' });
   } catch (error) {
-    console.error('Error updating settings:', error);
+    logger.error('Error updating settings', { error: error.message });
     res.status(500).json({
       error: 'Failed to update settings',
       details: error.message
@@ -102,7 +103,7 @@ router.get('/ai/test', async (req, res) => {
       overall: groqConnected && imageConnected ? 'All systems operational' : 'Some services unavailable'
     });
   } catch (error) {
-    console.error('Error testing AI connections:', error);
+    logger.error('Error testing AI connections', { error: error.message });
     res.status(500).json({
       error: 'Failed to test AI connections',
       details: error.message

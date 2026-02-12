@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
+const { logger } = require('../utils/logger');
 
 // API key for Pollinations.ai (removes watermark when provided)
 const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY;
@@ -55,34 +56,32 @@ function buildPollinationsUrl(prompt, width, height, seed) {
  * @param {string} pollinationsUrl - Pollinations.ai URL
  * @param {number} width - Image width
  * @param {number} height - Image height
- * @returns {void}
  */
-function storeImageMetadata(hash, prompt, pollinationsUrl, width, height) {
-  db.prepare(`
+async function storeImageMetadata(hash, prompt, pollinationsUrl, width, height) {
+  await db.run(`
     INSERT OR IGNORE INTO images (hash, prompt, pollinations_url, width, height)
     VALUES (?, ?, ?, ?, ?)
-  `).run(hash, prompt, pollinationsUrl, width, height);
+  `, [hash, prompt, pollinationsUrl, width, height]);
 }
 
 /**
  * Update cached path in database
  * @param {string} hash - Image hash
  * @param {string} cachedPath - Path to cached file
- * @returns {void}
  */
-function updateCachedPath(hash, cachedPath) {
-  db.prepare(`
+async function updateCachedPath(hash, cachedPath) {
+  await db.run(`
     UPDATE images SET cached_path = ? WHERE hash = ?
-  `).run(cachedPath, hash);
+  `, [cachedPath, hash]);
 }
 
 /**
  * Get image metadata from database
  * @param {string} hash - Image hash
- * @returns {Object|null} Image metadata or null
+ * @returns {Promise<Object|null>} Image metadata or null
  */
-function getImageMetadata(hash) {
-  return db.prepare('SELECT * FROM images WHERE hash = ?').get(hash);
+async function getImageMetadata(hash) {
+  return await db.get('SELECT * FROM images WHERE hash = ?', [hash]);
 }
 
 /**
@@ -111,7 +110,7 @@ async function generateImage(prompt, options = {}) {
     const pollinationsUrl = buildPollinationsUrl(enhancedPrompt, width, height, seed);
 
     // Store metadata in database
-    storeImageMetadata(hash, enhancedPrompt, pollinationsUrl, width, height);
+    await storeImageMetadata(hash, enhancedPrompt, pollinationsUrl, width, height);
 
     // Return hash instead of URL - the /api/images/:hash endpoint will handle serving
     return {
@@ -119,7 +118,7 @@ async function generateImage(prompt, options = {}) {
       url: `/api/images/${hash}`
     };
   } catch (error) {
-    console.error('Image generation error:', error.message);
+    logger.error('Image generation error', { error: error.message });
     // Return a fallback hash (will show placeholder)
     const fallbackHash = 'fallback-' + generateHash();
     return {
@@ -135,10 +134,10 @@ async function generateImage(prompt, options = {}) {
  * @returns {Promise<string|null>} Path to cached file or null on error
  */
 async function fetchAndCacheImage(hash) {
-  const metadata = getImageMetadata(hash);
+  const metadata = await getImageMetadata(hash);
 
   if (!metadata) {
-    console.error('No metadata found for hash:', hash);
+    logger.warn('No metadata found for hash', { hash });
     return null;
   }
 
@@ -148,7 +147,7 @@ async function fetchAndCacheImage(hash) {
   }
 
   try {
-    console.log('Fetching image from Pollinations.ai:', hash);
+    logger.info('Fetching image from Pollinations.ai', { hash });
 
     const headers = {};
     if (POLLINATIONS_API_KEY) {
@@ -167,15 +166,15 @@ async function fetchAndCacheImage(hash) {
       fs.writeFileSync(cachedPath, response.data);
 
       // Update database
-      updateCachedPath(hash, cachedPath);
+      await updateCachedPath(hash, cachedPath);
 
-      console.log('Image cached successfully:', hash);
+      logger.info('Image cached successfully', { hash });
       return cachedPath;
     }
 
     return null;
   } catch (error) {
-    console.error('Failed to fetch image:', error.message);
+    logger.error('Failed to fetch image', { hash, error: error.message });
     return null;
   }
 }
@@ -191,7 +190,7 @@ async function getCachedImage(hash) {
     return null;
   }
 
-  const metadata = getImageMetadata(hash);
+  const metadata = await getImageMetadata(hash);
 
   if (!metadata) {
     return null;
@@ -241,27 +240,27 @@ async function generateNPCPortrait(npc, style = 'fantasy art') {
 /**
  * Delete cached image and database record
  * @param {string} hash - Image hash
- * @returns {boolean} True if deleted successfully
+ * @returns {Promise<boolean>} True if deleted successfully
  */
-function deleteImage(hash) {
+async function deleteImage(hash) {
   try {
-    const metadata = getImageMetadata(hash);
+    const metadata = await getImageMetadata(hash);
 
     if (metadata) {
       // Delete cached file if exists
       if (metadata.cached_path && fs.existsSync(metadata.cached_path)) {
         fs.unlinkSync(metadata.cached_path);
-        console.log('Deleted cached image:', metadata.cached_path);
+        logger.info('Deleted cached image', { path: metadata.cached_path });
       }
 
       // Delete from database
-      db.prepare('DELETE FROM images WHERE hash = ?').run(hash);
-      console.log('Deleted image metadata:', hash);
+      await db.run('DELETE FROM images WHERE hash = ?', [hash]);
+      logger.info('Deleted image metadata', { hash });
     }
 
     return true;
   } catch (error) {
-    console.error('Failed to delete image:', error.message);
+    logger.error('Failed to delete image', { hash, error: error.message });
     return false;
   }
 }
@@ -270,25 +269,29 @@ function deleteImage(hash) {
  * Delete all images for an adventure
  * @param {number} adventureId - Adventure ID
  */
-function deleteAdventureImages(adventureId) {
+async function deleteAdventureImages(adventureId) {
   try {
     // Get all scene image hashes
-    const sceneHashes = db.prepare(`
+    const sceneRows = await db.all(`
       SELECT image_hash FROM scenes WHERE adventure_id = ? AND image_hash IS NOT NULL
-    `).all(adventureId).map(row => row.image_hash);
+    `, [adventureId]);
+    const sceneHashes = sceneRows.map(row => row.image_hash);
 
     // Get all NPC portrait hashes
-    const npcHashes = db.prepare(`
+    const npcRows = await db.all(`
       SELECT portrait_hash FROM npcs WHERE adventure_id = ? AND portrait_hash IS NOT NULL
-    `).all(adventureId).map(row => row.portrait_hash);
+    `, [adventureId]);
+    const npcHashes = npcRows.map(row => row.portrait_hash);
 
     // Combine and delete all
     const allHashes = [...sceneHashes, ...npcHashes];
-    allHashes.forEach(hash => deleteImage(hash));
+    for (const hash of allHashes) {
+      await deleteImage(hash);
+    }
 
-    console.log(`Deleted ${allHashes.length} images for adventure ${adventureId}`);
+    logger.info('Deleted adventure images', { adventureId, count: allHashes.length });
   } catch (error) {
-    console.error('Failed to delete adventure images:', error.message);
+    logger.error('Failed to delete adventure images', { adventureId, error: error.message });
   }
 }
 
@@ -323,7 +326,7 @@ async function testConnection() {
 
     return response.status === 200 && response.data.byteLength > 0;
   } catch (error) {
-    console.error('Pollinations.ai connection test failed:', error.message);
+    logger.error('Pollinations.ai connection test failed', { error: error.message });
     return false;
   }
 }
@@ -334,14 +337,14 @@ async function testConnection() {
  * @returns {Promise<Object>} Result with success status, new hash, and new URL
  */
 async function regenerateImage(oldHash) {
-  const metadata = getImageMetadata(oldHash);
+  const metadata = await getImageMetadata(oldHash);
 
   if (!metadata) {
     return { success: false, error: 'Image not found' };
   }
 
   try {
-    console.log('Regenerating image:', oldHash);
+    logger.info('Regenerating image', { oldHash });
 
     // Generate a new hash for the new image
     const newHash = generateHash();
@@ -370,13 +373,13 @@ async function regenerateImage(oldHash) {
       fs.writeFileSync(cachedPath, response.data);
 
       // Store new image metadata in database
-      storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
-      updateCachedPath(newHash, cachedPath);
+      await storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
+      await updateCachedPath(newHash, cachedPath);
 
       // Delete old image (file and db record)
-      deleteImage(oldHash);
+      await deleteImage(oldHash);
 
-      console.log('Image regenerated successfully:', oldHash, '->', newHash);
+      logger.info('Image regenerated successfully', { oldHash, newHash });
       return {
         success: true,
         oldHash,
@@ -387,7 +390,7 @@ async function regenerateImage(oldHash) {
 
     return { success: false, error: 'Failed to fetch new image' };
   } catch (error) {
-    console.error('Failed to regenerate image:', error.message);
+    logger.error('Failed to regenerate image', { oldHash, error: error.message });
     return { success: false, error: error.message };
   }
 }
@@ -396,17 +399,17 @@ async function regenerateImage(oldHash) {
  * Update scene's image hash in database
  * @param {number} sceneId - Scene ID
  * @param {string} newHash - New image hash
- * @returns {boolean} True if updated successfully
+ * @returns {Promise<boolean>} True if updated successfully
  */
-function updateSceneImageHash(sceneId, newHash) {
+async function updateSceneImageHash(sceneId, newHash) {
   try {
-    db.prepare(`
+    await db.run(`
       UPDATE scenes SET image_hash = ?, image_url = ? WHERE id = ?
-    `).run(newHash, `/api/images/${newHash}`, sceneId);
-    console.log('Updated scene image hash:', sceneId, '->', newHash);
+    `, [newHash, `/api/images/${newHash}`, sceneId]);
+    logger.info('Updated scene image hash', { sceneId, newHash });
     return true;
   } catch (error) {
-    console.error('Failed to update scene image hash:', error.message);
+    logger.error('Failed to update scene image hash', { sceneId, error: error.message });
     return false;
   }
 }
@@ -414,10 +417,10 @@ function updateSceneImageHash(sceneId, newHash) {
 /**
  * Find scene by image hash
  * @param {string} hash - Image hash
- * @returns {Object|null} Scene object or null
+ * @returns {Promise<Object|null>} Scene object or null
  */
-function findSceneByImageHash(hash) {
-  return db.prepare('SELECT * FROM scenes WHERE image_hash = ?').get(hash);
+async function findSceneByImageHash(hash) {
+  return await db.get('SELECT * FROM scenes WHERE image_hash = ?', [hash]);
 }
 
 module.exports = {

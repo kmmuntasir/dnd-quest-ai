@@ -4,7 +4,7 @@ const db = require('../config/database');
 const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
 const { aiLimiter } = require('../middleware/rateLimiter');
-const { validate, validateAll } = require('../middleware/validate');
+const { validate } = require('../middleware/validate');
 const { logger } = require('../utils/logger');
 const {
   generateCharacterNameSchema,
@@ -62,6 +62,7 @@ router.post('/generate-context', aiLimiter, validate(generateContextSchema), asy
 router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (req, res) => {
   try {
     const { theme, tone, difficulty, length, context } = req.body;
+    const userId = req.user?.id || null;
 
     // Generate adventure using Groq
     logger.info('Generating adventure', { theme, tone, difficulty, length });
@@ -100,27 +101,19 @@ router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (re
     );
 
     // Insert adventure into database
-    const adventureResult = db.prepare(`
-      INSERT INTO adventures (title, description, setting, quest, difficulty, generated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(
-      adventure.title,
-      adventure.description,
-      adventure.setting,
-      adventure.quest,
-      difficulty
-    );
+    const adventureResult = await db.run(`
+      INSERT INTO adventures (title, description, setting, quest, difficulty, user_id, generated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [adventure.title, adventure.description, adventure.setting, adventure.quest, difficulty, userId]);
 
-    const adventureId = adventureResult.lastInsertRowid;
+    const adventureId = adventureResult.lastID;
 
     // Insert scenes with image_hash
-    const sceneStmt = db.prepare(`
-      INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
     for (const scene of scenesWithImages) {
-      sceneStmt.run(
+      await db.run(`
+        INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [
         adventureId,
         scenesWithImages.indexOf(scene),
         scene.description,
@@ -128,24 +121,15 @@ router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (re
         scene.image_hash,
         JSON.stringify(scene.choices),
         scene.isKeyScene ? 1 : 0
-      );
+      ]);
     }
 
     // Insert NPCs with portrait_hash
-    const npcStmt = db.prepare(`
-      INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
     for (const npc of npcsWithImages) {
-      npcStmt.run(
-        adventureId,
-        npc.name,
-        npc.description,
-        npc.role,
-        npc.image_url,
-        npc.portrait_hash
-      );
+      await db.run(`
+        INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [adventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
     }
 
     logger.info('Adventure saved', { adventureId });
@@ -176,19 +160,19 @@ router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (re
  * GET /api/adventures/:id
  * Get adventure details by ID
  */
-router.get('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
+router.get('/:id', validate(adventureIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Get adventure
-    const adventure = db.prepare('SELECT * FROM adventures WHERE id = ?').get(id);
+    const adventure = await db.get('SELECT * FROM adventures WHERE id = ?', [id]);
 
     if (!adventure) {
       return res.status(404).json({ error: 'Adventure not found' });
     }
 
     // Get scenes
-    const scenes = db.prepare('SELECT * FROM scenes WHERE adventure_id = ? ORDER BY scene_order').all(id);
+    const scenes = await db.all('SELECT * FROM scenes WHERE adventure_id = ? ORDER BY scene_order', [id]);
 
     // Parse choices from JSON
     const scenesWithParsedChoices = scenes.map(scene => ({
@@ -198,7 +182,7 @@ router.get('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
     }));
 
     // Get NPCs
-    const npcs = db.prepare('SELECT * FROM npcs WHERE adventure_id = ?').all(id);
+    const npcs = await db.all('SELECT * FROM npcs WHERE adventure_id = ?', [id]);
 
     res.json({
       ...adventure,
@@ -218,9 +202,9 @@ router.get('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
  * GET /api/adventures
  * List all adventures
  */
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const adventures = db.prepare('SELECT id, title, description, difficulty, generated_at FROM adventures ORDER BY generated_at DESC').all();
+    const adventures = await db.all('SELECT id, title, description, difficulty, generated_at FROM adventures ORDER BY generated_at DESC');
 
     res.json(adventures);
   } catch (error) {
@@ -236,12 +220,12 @@ router.get('/', (req, res) => {
  * DELETE /api/adventures/:id
  * Delete an adventure and all associated data (scenes, NPCs, saved games, cached images)
  */
-router.delete('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
+router.delete('/:id', validate(adventureIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Check if adventure exists
-    const adventure = db.prepare('SELECT id FROM adventures WHERE id = ?').get(id);
+    const adventure = await db.get('SELECT id FROM adventures WHERE id = ?', [id]);
 
     if (!adventure) {
       return res.status(404).json({ error: 'Adventure not found' });
@@ -250,19 +234,19 @@ router.delete('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
     logger.info('Deleting adventure', { adventureId: id });
 
     // Delete cached images first (before deleting database records)
-    imageService.deleteAdventureImages(id);
+    await imageService.deleteAdventureImages(id);
 
     // Delete saved games
-    db.prepare('DELETE FROM saved_games WHERE adventure_id = ?').run(id);
+    await db.run('DELETE FROM saved_games WHERE adventure_id = ?', [id]);
 
     // Delete scenes
-    db.prepare('DELETE FROM scenes WHERE adventure_id = ?').run(id);
+    await db.run('DELETE FROM scenes WHERE adventure_id = ?', [id]);
 
     // Delete NPCs
-    db.prepare('DELETE FROM npcs WHERE adventure_id = ?').run(id);
+    await db.run('DELETE FROM npcs WHERE adventure_id = ?', [id]);
 
     // Delete adventure
-    db.prepare('DELETE FROM adventures WHERE id = ?').run(id);
+    await db.run('DELETE FROM adventures WHERE id = ?', [id]);
 
     logger.info('Adventure deleted successfully', { adventureId: id });
 

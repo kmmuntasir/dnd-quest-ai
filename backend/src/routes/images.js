@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const imageService = require('../services/imageService');
+const { logger } = require('../utils/logger');
 
 // Placeholder image path (fallback when image fails to load)
 const PLACEHOLDER_IMAGE = path.resolve(__dirname, '../../storage/placeholder.png');
@@ -22,7 +23,7 @@ router.post('/:hash/regenerate', async (req, res) => {
     }
 
     // Find the scene using this image hash
-    const scene = imageService.findSceneByImageHash(hash);
+    const scene = await imageService.findSceneByImageHash(hash);
 
     // Regenerate the image
     const result = await imageService.regenerateImage(hash);
@@ -30,7 +31,7 @@ router.post('/:hash/regenerate', async (req, res) => {
     if (result.success) {
       // Update the scene with the new hash if scene was found
       if (scene) {
-        imageService.updateSceneImageHash(scene.id, result.newHash);
+        await imageService.updateSceneImageHash(scene.id, result.newHash);
       }
 
       return res.json({
@@ -48,7 +49,7 @@ router.post('/:hash/regenerate', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error regenerating image:', error.message);
+    logger.error('Error regenerating image', { hash, error: error.message });
     return res.status(500).json({
       error: 'Failed to regenerate image',
       details: error.message
@@ -80,7 +81,7 @@ router.get('/:hash', async (req, res) => {
     }
 
     // If caching failed, try to get metadata and redirect to original URL
-    const metadata = imageService.getImageMetadata(hash);
+    const metadata = await imageService.getImageMetadata(hash);
 
     if (metadata && metadata.pollinations_url) {
       // Redirect to Pollinations URL as fallback
@@ -91,7 +92,7 @@ router.get('/:hash', async (req, res) => {
     return servePlaceholder(res, 'Image not found');
 
   } catch (error) {
-    console.error('Error serving image:', error.message);
+    logger.error('Error serving image', { hash, error: error.message });
     return servePlaceholder(res, 'Error loading image');
   }
 });
@@ -116,7 +117,7 @@ function serveImage(res, imagePath) {
   fileStream.pipe(res);
 
   fileStream.on('error', (error) => {
-    console.error('Error streaming image:', error.message);
+    logger.error('Error streaming image', { path: imagePath, error: error.message });
     if (!res.headersSent) {
       servePlaceholder(res, 'Error streaming image');
     }

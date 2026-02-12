@@ -48,9 +48,10 @@ function calculateStartingHP(characterClass, constitution) {
 router.post('/start', validate(startGameSchema), async (req, res) => {
   try {
     const { adventureId, characterName, characterClass } = req.body;
+    const userId = req.user?.id || null;
 
     // Check if adventure exists
-    const adventure = db.prepare('SELECT * FROM adventures WHERE id = ?').get(adventureId);
+    const adventure = await db.get('SELECT * FROM adventures WHERE id = ?', [adventureId]);
     if (!adventure) {
       return res.status(404).json({ error: 'Adventure not found' });
     }
@@ -69,7 +70,7 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
     const hp = calculateStartingHP(characterClass, stats.CON);
 
     // Get first scene
-    const firstScene = db.prepare('SELECT * FROM scenes WHERE adventure_id = ? ORDER BY scene_order LIMIT 1').get(adventureId);
+    const firstScene = await db.get('SELECT * FROM scenes WHERE adventure_id = ? ORDER BY scene_order LIMIT 1', [adventureId]);
 
     if (!firstScene) {
       return res.status(400).json({ error: 'Adventure has no scenes' });
@@ -83,13 +84,14 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
     };
 
     // Create saved game
-    const result = db.prepare(`
+    const result = await db.run(`
       INSERT INTO saved_games (
-        adventure_id, character_name, character_class, stats, hp,
+        adventure_id, user_id, character_name, character_class, stats, hp,
         inventory, gold, current_scene_id, game_history
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
       adventureId,
+      userId,
       characterName,
       characterClass,
       JSON.stringify(stats),
@@ -98,9 +100,9 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
       0,
       firstScene.id,
       JSON.stringify([])
-    );
+    ]);
 
-    const gameId = result.lastInsertRowid;
+    const gameId = result.lastID;
 
     logger.info('Game started', { gameId, adventureId, characterName, characterClass });
 
@@ -135,26 +137,26 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
  * GET /api/games/:id
  * Get current game state
  */
-router.get('/:id', validate(gameIdSchema, 'params'), (req, res) => {
+router.get('/:id', validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Get saved game
-    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+    const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
     // Get current scene
-    const scene = db.prepare('SELECT * FROM scenes WHERE id = ?').get(savedGame.current_scene_id);
+    const scene = await db.get('SELECT * FROM scenes WHERE id = ?', [savedGame.current_scene_id]);
 
     if (!scene) {
       return res.status(404).json({ error: 'Current scene not found' });
     }
 
     // Get adventure info
-    const adventure = db.prepare('SELECT id, title, description FROM adventures WHERE id = ?').get(savedGame.adventure_id);
+    const adventure = await db.get('SELECT id, title, description FROM adventures WHERE id = ?', [savedGame.adventure_id]);
 
     // Parse data
     const sceneWithChoices = {
@@ -197,14 +199,14 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
     const { choiceIndex, diceRoll } = req.body;
 
     // Get saved game
-    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+    const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
     // Get current scene
-    const scene = db.prepare('SELECT * FROM scenes WHERE id = ?').get(savedGame.current_scene_id);
+    const scene = await db.get('SELECT * FROM scenes WHERE id = ?', [savedGame.current_scene_id]);
 
     if (!scene) {
       return res.status(404).json({ error: 'Current scene not found' });
@@ -241,17 +243,17 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
       // Character is dead
       if (updatedHP <= 0) {
         // Update game as complete (death)
-        db.prepare(`
+        await db.run(`
           UPDATE saved_games
           SET game_history = ?, last_played = CURRENT_TIMESTAMP
           WHERE id = ?
-        `).run(
+        `, [
           JSON.stringify([
             ...JSON.parse(savedGame.game_history),
             { choice: playerChoice, roll: diceRoll, outcome: response.outcome, died: true }
           ]),
           id
-        );
+        ]);
 
         return res.json({
           narrative: response.narrative,
@@ -289,12 +291,12 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
     });
 
     // Get next scene (by scene_order)
-    const nextScene = db.prepare(`
+    const nextScene = await db.get(`
       SELECT * FROM scenes
       WHERE adventure_id = ? AND scene_order > ?
       ORDER BY scene_order ASC
       LIMIT 1
-    `).get(savedGame.adventure_id, scene.scene_order);
+    `, [savedGame.adventure_id, scene.scene_order]);
 
     let nextSceneData = null;
     let isGameOver = false;
@@ -302,11 +304,11 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
 
     if (nextScene) {
       // Progress to next scene
-      db.prepare(`
+      await db.run(`
         UPDATE saved_games
         SET stats = ?, hp = ?, gold = ?, inventory = ?, current_scene_id = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(
+      `, [
         JSON.stringify(updatedStats),
         updatedHP,
         updatedGold,
@@ -314,7 +316,7 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
         nextScene.id,
         JSON.stringify(gameHistory),
         id
-      );
+      ]);
 
       nextSceneData = {
         ...nextScene,
@@ -326,18 +328,18 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
       isVictory = true;
       isGameOver = true;
 
-      db.prepare(`
+      await db.run(`
         UPDATE saved_games
         SET stats = ?, hp = ?, gold = ?, inventory = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(
+      `, [
         JSON.stringify(updatedStats),
         updatedHP,
         updatedGold,
         JSON.stringify(updatedInventory),
         JSON.stringify(gameHistory),
         id
-      );
+      ]);
     }
 
     res.json({
@@ -367,19 +369,19 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
  * POST /api/games/:id/go-back
  * Go back to previous scene (not available in hard mode)
  */
-router.post('/:id/go-back', validate(gameIdSchema, 'params'), (req, res) => {
+router.post('/:id/go-back', validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Get saved game
-    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+    const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
     // Get adventure to check difficulty
-    const adventure = db.prepare('SELECT difficulty FROM adventures WHERE id = ?').get(savedGame.adventure_id);
+    const adventure = await db.get('SELECT difficulty FROM adventures WHERE id = ?', [savedGame.adventure_id]);
 
     if (!adventure) {
       return res.status(404).json({ error: 'Adventure not found' });
@@ -411,11 +413,11 @@ router.post('/:id/go-back', validate(gameIdSchema, 'params'), (req, res) => {
     gameHistory.pop();
 
     // Restore previous state
-    db.prepare(`
+    await db.run(`
       UPDATE saved_games
       SET stats = ?, hp = ?, gold = ?, inventory = ?, current_scene_id = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(
+    `, [
       JSON.stringify(previousState.stats),
       previousState.hp,
       previousState.gold,
@@ -423,10 +425,10 @@ router.post('/:id/go-back', validate(gameIdSchema, 'params'), (req, res) => {
       previousState.scene_id,
       JSON.stringify(gameHistory),
       id
-    );
+    ]);
 
     // Get the previous scene
-    const previousScene = db.prepare('SELECT * FROM scenes WHERE id = ?').get(previousState.scene_id);
+    const previousScene = await db.get('SELECT * FROM scenes WHERE id = ?', [previousState.scene_id]);
 
     const sceneData = {
       ...previousScene,
@@ -458,16 +460,16 @@ router.post('/:id/go-back', validate(gameIdSchema, 'params'), (req, res) => {
  * POST /api/games/:id/save
  * Manual save
  */
-router.post('/:id/save', validate(gameIdSchema, 'params'), (req, res) => {
+router.post('/:id/save', validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Update last played timestamp
-    db.prepare(`
+    await db.run(`
       UPDATE saved_games
       SET last_played = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(id);
+    `, [id]);
 
     res.json({ success: true, message: 'Game saved successfully' });
   } catch (error) {
@@ -483,23 +485,23 @@ router.post('/:id/save', validate(gameIdSchema, 'params'), (req, res) => {
  * POST /api/games/:id/restart
  * Restart game with same character (reset to first scene, restore HP)
  */
-router.post('/:id/restart', validate(gameIdSchema, 'params'), (req, res) => {
+router.post('/:id/restart', validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
     // Get current game
-    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+    const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
     if (!savedGame) {
       return res.status(404).json({ error: 'Game not found' });
     }
 
     // Get first scene of the adventure
-    const firstScene = db.prepare(`
+    const firstScene = await db.get(`
       SELECT * FROM scenes
       WHERE adventure_id = ?
       ORDER BY scene_order
       LIMIT 1
-    `).get(savedGame.adventure_id);
+    `, [savedGame.adventure_id]);
 
     if (!firstScene) {
       return res.status(400).json({ error: 'Adventure has no scenes' });
@@ -510,7 +512,7 @@ router.post('/:id/restart', validate(gameIdSchema, 'params'), (req, res) => {
     const maxHp = calculateStartingHP(savedGame.character_class, stats.CON);
 
     // Reset game to first scene, restore HP, clear history
-    db.prepare(`
+    await db.run(`
       UPDATE saved_games
       SET current_scene_id = ?,
           hp = ?,
@@ -519,7 +521,7 @@ router.post('/:id/restart', validate(gameIdSchema, 'params'), (req, res) => {
           game_history = '[]',
           last_played = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(firstScene.id, maxHp, id);
+    `, [firstScene.id, maxHp, id]);
 
     logger.info('Game restarted', { gameId: id });
 
