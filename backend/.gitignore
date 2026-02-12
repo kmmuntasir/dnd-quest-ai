@@ -39,3 +39,8 @@ coverage/
 dist/
 build/
 backend/.husky
+
+# SQLite memory database files
+:memory:
+:memory:-*
+

@@ -77,6 +77,8 @@ export function Image({ src, alt, className = '', fallback = null, ...props }) {
       <img
         src={resolvedSrc}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         className={clsx('w-full h-full object-cover', loading ? 'opacity-0' : 'opacity-100', 'transition-opacity')}
         onError={handleError}
         onLoad={handleLoad}

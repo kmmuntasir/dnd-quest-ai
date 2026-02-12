@@ -10,6 +10,7 @@ const cors = require('cors');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { sanitizeBody, lenientOptions } = require('./middleware/sanitize');
+const { performanceMonitor } = require('./middleware/performance');
 const { logger, httpLogger, requestIdMiddleware } = require('./utils/logger');
 const healthService = require('./services/healthService');
 
@@ -53,6 +54,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(sanitizeBody(lenientOptions)); // Sanitize input to prevent XSS
 app.use(requestIdMiddleware); // Add request ID for correlation
 app.use(httpLogger);
+app.use(performanceMonitor); // Monitor request performance
 
 // Apply general rate limiting to all API routes
 app.use('/api', generalLimiter);

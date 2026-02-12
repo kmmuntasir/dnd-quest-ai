@@ -307,52 +307,127 @@ async function initializeDatabase() {
 
 /**
  * Run database migrations
+ * Uses versioned migration system for better tracking and rollback support
  */
 async function runMigrations() {
   try {
-    // Check if image_hash column exists in scenes table
-    const scenesInfo = await dbAsync.all("PRAGMA table_info(scenes)");
-    const hasImageHash = scenesInfo.some(col => col.name === 'image_hash');
+    // Create migrations tracking table if it doesn't exist
+    await dbAsync.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-    if (!hasImageHash) {
-      logger.info('Adding image_hash column to scenes table');
-      await dbAsync.exec('ALTER TABLE scenes ADD COLUMN image_hash TEXT');
+    // Get applied migrations
+    const applied = await dbAsync.all('SELECT version FROM schema_migrations');
+    const appliedVersions = new Set(applied.map(m => m.version));
+
+    // Define versioned migrations
+    const migrations = [
+      {
+        version: 1,
+        name: 'add_image_hash_to_scenes',
+        // Check if needed before applying
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(scenes)");
+          return !info.some(col => col.name === 'image_hash');
+        },
+        up: 'ALTER TABLE scenes ADD COLUMN image_hash TEXT'
+      },
+      {
+        version: 2,
+        name: 'add_portrait_hash_to_npcs',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(npcs)");
+          return !info.some(col => col.name === 'portrait_hash');
+        },
+        up: 'ALTER TABLE npcs ADD COLUMN portrait_hash TEXT'
+      },
+      {
+        version: 3,
+        name: 'add_user_id_to_adventures',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(adventures)");
+          return !info.some(col => col.name === 'user_id');
+        },
+        up: 'ALTER TABLE adventures ADD COLUMN user_id INTEGER REFERENCES users(id)'
+      },
+      {
+        version: 4,
+        name: 'add_user_id_to_saved_games',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(saved_games)");
+          return !info.some(col => col.name === 'user_id');
+        },
+        up: 'ALTER TABLE saved_games ADD COLUMN user_id INTEGER REFERENCES users(id)'
+      },
+      {
+        version: 5,
+        name: 'add_user_id_to_settings',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(settings)");
+          return !info.some(col => col.name === 'user_id');
+        },
+        up: 'ALTER TABLE settings ADD COLUMN user_id INTEGER REFERENCES users(id)'
+      }
+    ];
+
+    // Run migrations in order
+    for (const migration of migrations) {
+      if (appliedVersions.has(migration.version)) {
+        continue; // Already applied
+      }
+
+      // Check if migration is needed
+      const needsMigration = migration.check ? await migration.check() : true;
+
+      if (needsMigration) {
+        logger.info('Running migration', {
+          version: migration.version,
+          name: migration.name
+        });
+
+        await dbAsync.run('BEGIN TRANSACTION');
+        try {
+          if (migration.up) {
+            await dbAsync.exec(migration.up);
+          }
+
+          await dbAsync.run(
+            'INSERT INTO schema_migrations (version, name) VALUES (?, ?)',
+            [migration.version, migration.name]
+          );
+
+          await dbAsync.run('COMMIT');
+          logger.info('Migration completed', { version: migration.version });
+        } catch (error) {
+          await dbAsync.run('ROLLBACK');
+          logger.error('Migration failed', {
+            version: migration.version,
+            name: migration.name,
+            error: error.message
+          });
+          throw error;
+        }
+      } else {
+        // Column already exists, just record the migration
+        await dbAsync.run(
+          'INSERT INTO schema_migrations (version, name) VALUES (?, ?)',
+          [migration.version, migration.name]
+        );
+        logger.info('Migration skipped (already applied)', {
+          version: migration.version,
+          name: migration.name
+        });
+      }
     }
 
-    // Check if portrait_hash column exists in npcs table
-    const npcsInfo = await dbAsync.all("PRAGMA table_info(npcs)");
-    const hasPortraitHash = npcsInfo.some(col => col.name === 'portrait_hash');
-
-    if (!hasPortraitHash) {
-      logger.info('Adding portrait_hash column to npcs table');
-      await dbAsync.exec('ALTER TABLE npcs ADD COLUMN portrait_hash TEXT');
-    }
-
-    // Add user_id column to adventures table
-    const adventuresInfo = await dbAsync.all("PRAGMA table_info(adventures)");
-    const adventuresHasUserId = adventuresInfo.some(col => col.name === 'user_id');
-    if (!adventuresHasUserId) {
-      logger.info('Adding user_id column to adventures table');
-      await dbAsync.exec('ALTER TABLE adventures ADD COLUMN user_id INTEGER REFERENCES users(id)');
-    }
-
-    // Add user_id column to saved_games table
-    const savedGamesInfo = await dbAsync.all("PRAGMA table_info(saved_games)");
-    const savedGamesHasUserId = savedGamesInfo.some(col => col.name === 'user_id');
-    if (!savedGamesHasUserId) {
-      logger.info('Adding user_id column to saved_games table');
-      await dbAsync.exec('ALTER TABLE saved_games ADD COLUMN user_id INTEGER REFERENCES users(id)');
-    }
-
-    // Add user_id column to settings table
-    const settingsInfo = await dbAsync.all("PRAGMA table_info(settings)");
-    const settingsHasUserId = settingsInfo.some(col => col.name === 'user_id');
-    if (!settingsHasUserId) {
-      logger.info('Adding user_id column to settings table');
-      await dbAsync.exec('ALTER TABLE settings ADD COLUMN user_id INTEGER REFERENCES users(id)');
-    }
+    logger.info('All migrations completed');
   } catch (error) {
-    logger.warn('Migration check', { error: error.message });
+    logger.error('Migration error', { error: error.message });
+    // Don't throw - allow app to continue with existing schema
   }
 }
 

@@ -201,6 +201,8 @@ export function Gallery() {
                     <img
                       src={resolveImageUrl(selectedScene.image_url)}
                       alt={`Scene ${scenes.findIndex(s => s.id === selectedScene.id) + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="max-w-full max-h-[55vh] lg:max-h-[65vh] object-contain rounded-lg"
                     />
 
@@ -253,6 +255,8 @@ export function Gallery() {
                       <img
                         src={resolveImageUrl(scene.image_url)}
                         alt={`Thumbnail ${index + 1}`}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                       />
                     </button>
