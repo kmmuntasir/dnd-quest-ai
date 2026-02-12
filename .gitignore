@@ -44,3 +44,6 @@ tmp/
 
 # Screenshots
 screenshot/
+
+# Backend storage (cached images)
+backend/storage/

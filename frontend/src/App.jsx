@@ -3,6 +3,7 @@ import { Home } from './pages/Home';
 import { Library } from './pages/Library';
 import { Game } from './pages/Game';
 import { Settings } from './pages/Settings';
+import { Gallery } from './pages/Gallery';
 import { Layout } from './components/common/Layout';
 import { NotFound } from './components/common/NotFound';
 import { CharacterCreation } from './components/game/CharacterCreation';
@@ -16,7 +17,8 @@ const router = createBrowserRouter([
       { path: 'library', element: <Library /> },
       { path: 'create-character/:adventureId', element: <CharacterCreation /> },
       { path: 'game/:gameId', element: <Game /> },
-      { path: 'settings', element: <Settings /> }
+      { path: 'settings', element: <Settings /> },
+      { path: 'gallery/:adventureId', element: <Gallery /> }
     ]
   },
   {
