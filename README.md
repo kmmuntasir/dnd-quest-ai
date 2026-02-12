@@ -1,4 +1,4 @@
-# Dungeons & Dragons AI 🐉
+# Dungeons & Dragons AI
 
 An immersive D&D-style RPG where AI dynamically generates adventures, stories, and atmospheric images.
 
@@ -9,6 +9,7 @@ Play through AI-generated fantasy adventures with:
 - **Atmospheric Visuals** - AI-generated images via Pollinations.ai
 - **Replayability** - Branching paths and saved games
 - **Simple D&D Mechanics** - Character stats, dice rolls, choices matter
+- **Configurable Length** - Choose from Quick (3), Standard (5), Extended (8) scenes, or let AI decide
 
 ## Tech Stack
 
@@ -16,88 +17,79 @@ Play through AI-generated fantasy adventures with:
 - **Backend:** Express.js + SQLite
 - **AI Services:** Groq API (Llama 3.3 70B) + Pollinations.ai API
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
-
-1. **Node.js** (v18+)
-2. **Groq API key** (free tier) - Get from https://console.groq.com/
-3. **Pollinations.ai API key** (free tier) - Get from https://enter.pollinations.ai/
-
-### Installation
+See [docs/SETUP.md](docs/SETUP.md) for detailed setup instructions.
 
 ```bash
-# Clone the repo (coming soon)
+# Clone the repo
 git clone <repo-url>
 cd dungeons-and-dragons
 
-# Install dependencies
-npm install
+# Install backend dependencies
+cd backend && npm install
 
-# Start development
-npm run dev
-```
+# Install frontend dependencies
+cd ../frontend && npm install
 
-### Environment Variables
+# Create .env in backend/ with your API keys
+# GROQ_API_KEY=your_key
+# POLLINATIONS_API_KEY=your_key
 
-Create `.env`:
-```
-GROQ_API_KEY=your_groq_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
-POLLINATIONS_API_KEY=your_pollinations_api_key_here
-PORT=3000
+# Start backend (terminal 1)
+cd backend && npm run dev
+
+# Start frontend (terminal 2)
+cd frontend && npm run dev
 ```
 
 ## Features
 
-### 🎲 Story Generation
-- Automatic adventure creation
-- Custom themes (fantasy, horror, sci-fi)
+### Story Generation
+- Automatic adventure creation with configurable length
+- Custom themes (fantasy, horror, sci-fi, mystery, adventure, pirate)
 - Difficulty levels (easy, medium, hard)
-- AI-generated NPCs and key scenes
+- Tone options (serious, humorous, dark, light-hearted)
+- AI-generated story context suggestions
+- NPCs and branching choices
 
-### 🖼️ Dynamic Images
-- Scene illustrations
-- Character portraits
-- Item/treasure visuals
-- Powered by Pollinations.ai (free)
+### Dynamic Images
+- Scene illustrations with AI-generated visuals
+- Hash-based image caching for performance
+- Regenerate images if rate-limited
 
-### 🎮 Gameplay
-- Turn-based choices
-- d20 dice rolls with modifiers
-- Simple D&D-style mechanics
-- Character progression (planned)
+### Gameplay
+- Turn-based choices with dice rolls
+- d20 rolls with modifiers
+- Character stats that affect outcomes
+- Go back to previous scenes
+- Restart games
 
-### 💾 Save System
+### Save System
 - Auto-save after each scene
-- Multiple save slots
-- Resume any adventure
-- Replay with different choices
+- Resume any saved adventure
+- Delete old saves
 
-## Development Status
+## Documentation
 
-- [x] Project planning (PRD)
-- [ ] Frontend setup (React + Vite)
-- [ ] Backend setup (Express + SQLite)
-- [ ] Groq API integration
-- [ ] Pollinations.ai integration
-- [ ] Story generation flow
-- [ ] Gameplay engine
-- [ ] Save/load system
-- [ ] UI polish
+- [docs/SETUP.md](docs/SETUP.md) - Installation and configuration guide
+- [docs/PRD.md](docs/PRD.md) - Product requirements document
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) - Production deployment guide
+- [docs/ANALYSIS.md](docs/ANALYSIS.md) - Technical analysis and architecture
 
-See `docs/` folder for:
-- `docs/PRD.md` - Complete product requirements document
-- `docs/FRONTEND_TODO.md` - Frontend development task list
-- `docs/BACKEND_TODO.md` - Backend development task list
+## MVP Status
+
+The MVP is complete with all core features implemented:
+- [x] Adventure generation with configurable length
+- [x] Character creation with stats
+- [x] Dynamic scene progression with choices
+- [x] Dice rolling mechanics
+- [x] AI-generated images with caching
+- [x] Save/load system
+- [x] Library of saved games
+- [x] Regenerate rate-limited images
 
 ## Roadmap
-
-### Phase 1 (MVP)
-- ✅ Planning
-- ⏳ Core game loop
-- ⏳ Save system
-- ⏳ Basic styling
 
 ### Phase 2
 - Combat system
@@ -111,14 +103,10 @@ See `docs/` folder for:
 - Character leveling
 - Export adventures
 
-## Contributing
-
-Coming soon! For now, it's a personal project.
-
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License
 
 ---
 
-*Made with 💻 by Muntasir*
+*Made with AI assistance*
