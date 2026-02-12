@@ -65,6 +65,15 @@ export function ChoiceButton({ choice, index, selected, onSelect, disabled = fal
 }
 
 export function ChoicesList({ choices, onSelectChoice, disabled = false, selectedIndex = null }) {
+  // Safety check for undefined/null choices
+  if (!choices || !Array.isArray(choices) || choices.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-400">No choices available</p>
+      </div>
+    );
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowUp' && selectedIndex !== null && selectedIndex > 0) {
       e.preventDefault();
@@ -76,7 +85,7 @@ export function ChoicesList({ choices, onSelectChoice, disabled = false, selecte
   };
 
   return (
-    <div 
+    <div
       role="listbox"
       aria-label="Game choices"
       onKeyDown={handleKeyDown}

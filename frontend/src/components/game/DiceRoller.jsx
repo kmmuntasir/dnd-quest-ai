@@ -1,28 +1,18 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Dice1, Dice2, Dice3, Dice4, Dice5, Dice6 } from 'lucide-react';
 
 export function DiceRoller({ onRoll, disabled = false }) {
   const [rolling, setRolling] = useState(false);
   const [diceValue, setDiceValue] = useState(1);
   const [rotation, setRotation] = useState(0);
 
-  const diceIcons = {
-    1: Dice1,
-    2: Dice2,
-    3: Dice3,
-    4: Dice4,
-    5: Dice5,
-    6: Dice6
-  };
-
   const rollDice = () => {
     if (rolling || disabled) return;
-    
+
     setRolling(true);
     const finalValue = Math.floor(Math.random() * 20) + 1;
     const newRotation = rotation + 720 + (finalValue * 45); // Multiple rotations
-    
+
     // Animate
     let currentRotation = rotation;
     const animate = setInterval(() => {
@@ -67,19 +57,9 @@ export function DiceRoller({ onRoll, disabled = false }) {
             }}
           >
             <div className="text-center">
-              {rolling ? (
-                <Dice6 className="w-16 h-16 text-white" />
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  {(() => {
-                    const Icon = diceIcons[diceValue];
-                    return <Icon className="w-16 h-16 text-white" />;
-                  })()}
-                  <div className="font-display text-5xl font-bold text-white">
-                    {diceValue}
-                  </div>
-                </div>
-              )}
+              <div className="font-display text-5xl font-bold text-white">
+                {diceValue}
+              </div>
             </div>
           </div>
 
