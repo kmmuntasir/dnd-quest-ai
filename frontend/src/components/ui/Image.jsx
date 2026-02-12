@@ -3,9 +3,34 @@ import { Image as ImageIcon } from 'lucide-react';
 import React from 'react';
 import { clsx } from 'clsx';
 
+// Get API base URL for image requests
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+/**
+ * Resolve image URL - prepend API base URL for relative URLs
+ * @param {string} src - Image source URL (can be relative or absolute)
+ * @returns {string|null} Resolved URL or null if no source
+ */
+export function resolveImageUrl(src) {
+  if (!src) return null;
+  // If it's already a full URL, return as-is
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+    return src;
+  }
+  // For relative URLs starting with /api, prepend the base host
+  if (src.startsWith('/api/')) {
+    const baseUrl = API_BASE_URL.replace('/api', '');
+    return `${baseUrl}${src}`;
+  }
+  // For other relative URLs, prepend the API base URL
+  return `${API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+}
+
 export function Image({ src, alt, className = '', fallback = null, ...props }) {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const resolvedSrc = resolveImageUrl(src);
 
   const handleError = () => {
     setError(true);
@@ -15,6 +40,15 @@ export function Image({ src, alt, className = '', fallback = null, ...props }) {
   const handleLoad = () => {
     setLoading(false);
   };
+
+  if (!resolvedSrc) {
+    return (
+      <div className={clsx('bg-background-input flex items-center justify-center text-gray-500', className)} {...props}>
+        <ImageIcon className="w-16 h-16" />
+        <span className="ml-3 text-sm">No image</span>
+      </div>
+    );
+  }
 
   if (error && fallback) {
     return (
@@ -41,7 +75,7 @@ export function Image({ src, alt, className = '', fallback = null, ...props }) {
         </div>
       )}
       <img
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         className={clsx('w-full h-full object-cover', loading ? 'opacity-0' : 'opacity-100', 'transition-opacity')}
         onError={handleError}

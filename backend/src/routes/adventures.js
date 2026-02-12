@@ -105,10 +105,14 @@ router.post('/generate', async (req, res) => {
 
     // Generate NPC portraits
     const npcsWithImages = await Promise.all(
-      adventure.npcs.map(async (npc) => ({
-        ...npc,
-        image_url: await imageService.generateNPCPortrait(npc, 'fantasy art')
-      }))
+      adventure.npcs.map(async (npc) => {
+        const { hash, url } = await imageService.generateNPCPortrait(npc, 'fantasy art');
+        return {
+          ...npc,
+          image_url: url,
+          portrait_hash: hash
+        };
+      })
     );
 
     // Insert adventure into database
@@ -125,10 +129,10 @@ router.post('/generate', async (req, res) => {
 
     const adventureId = adventureResult.lastInsertRowid;
 
-    // Insert scenes
+    // Insert scenes with image_hash
     const sceneStmt = db.prepare(`
-      INSERT INTO scenes (adventure_id, scene_order, description, image_url, choices, is_key_scene)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const scene of scenesWithImages) {
@@ -137,15 +141,16 @@ router.post('/generate', async (req, res) => {
         scenesWithImages.indexOf(scene),
         scene.description,
         scene.image_url,
+        scene.image_hash,
         JSON.stringify(scene.choices),
         scene.isKeyScene ? 1 : 0
       );
     }
 
-    // Insert NPCs
+    // Insert NPCs with portrait_hash
     const npcStmt = db.prepare(`
-      INSERT INTO npcs (adventure_id, name, description, role, image_url)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     for (const npc of npcsWithImages) {
@@ -154,7 +159,8 @@ router.post('/generate', async (req, res) => {
         npc.name,
         npc.description,
         npc.role,
-        npc.image_url
+        npc.image_url,
+        npc.portrait_hash
       );
     }
 
@@ -237,6 +243,50 @@ router.get('/', (req, res) => {
     console.error('Error fetching adventures:', error);
     res.status(500).json({
       error: 'Failed to fetch adventures',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/adventures/:id
+ * Delete an adventure and all associated data (scenes, NPCs, saved games, cached images)
+ */
+router.delete('/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if adventure exists
+    const adventure = db.prepare('SELECT id FROM adventures WHERE id = ?').get(id);
+
+    if (!adventure) {
+      return res.status(404).json({ error: 'Adventure not found' });
+    }
+
+    console.log('Deleting adventure:', id);
+
+    // Delete cached images first (before deleting database records)
+    imageService.deleteAdventureImages(id);
+
+    // Delete saved games
+    db.prepare('DELETE FROM saved_games WHERE adventure_id = ?').run(id);
+
+    // Delete scenes
+    db.prepare('DELETE FROM scenes WHERE adventure_id = ?').run(id);
+
+    // Delete NPCs
+    db.prepare('DELETE FROM npcs WHERE adventure_id = ?').run(id);
+
+    // Delete adventure
+    db.prepare('DELETE FROM adventures WHERE id = ?').run(id);
+
+    console.log('Adventure deleted successfully:', id);
+
+    res.json({ success: true, message: 'Adventure deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting adventure:', error);
+    res.status(500).json({
+      error: 'Failed to delete adventure',
       details: error.message
     });
   }

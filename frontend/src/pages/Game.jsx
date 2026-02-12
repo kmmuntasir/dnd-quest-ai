@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Swords, Heart, Coins, Backpack, Undo2 } from 'lucide-react';
+import { Swords, Heart, Coins, Backpack, Undo2, RefreshCw } from 'lucide-react';
 import { Card } from '../components/ui/Card';
-import { Image } from '../components/ui/Image';
+import { Image, resolveImageUrl } from '../components/ui/Image';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { CharacterCreation } from '../components/game/CharacterCreation';
 import { DiceRoller } from '../components/game/DiceRoller';
@@ -28,6 +28,8 @@ export function Game() {
   const [finalNarrative, setFinalNarrative] = useState(null);
   const [goingBack, setGoingBack] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [imageVersion, setImageVersion] = useState(0);
 
   useEffect(() => {
     loadGame();
@@ -95,6 +97,25 @@ export function Game() {
       console.error('Failed to go back:', error);
       setGoingBack(false);
       alert(error.response?.data?.error || 'Failed to go back. Please try again.');
+    }
+  };
+
+  const handleRegenerateImage = async () => {
+    if (!currentScene?.image_hash || regenerating) return;
+
+    try {
+      setRegenerating(true);
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${currentScene.image_hash}/regenerate`);
+
+      if (response.data.success) {
+        // Force image refresh by updating version
+        setImageVersion(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Failed to regenerate image:', error);
+      alert(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -325,8 +346,23 @@ export function Game() {
             {/* Scene Image */}
             <div className="mb-6">
               <FadeIn delay={100}>
-                <div className="aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
-                  <Image src={currentScene.image_url} alt={currentScene.description} />
+                <div className="relative aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
+                  <Image
+                    src={`${currentScene.image_url}${imageVersion > 0 ? `?v=${imageVersion}` : ''}`}
+                    alt={currentScene.description}
+                  />
+                  {/* Regenerate button */}
+                  {currentScene.image_hash && (
+                    <button
+                      onClick={handleRegenerateImage}
+                      disabled={regenerating}
+                      className="absolute bottom-3 right-3 px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
+                      title="Regenerate image with new AI variation"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
+                      {regenerating ? 'Regenerating...' : 'Regenerate'}
+                    </button>
+                  )}
                 </div>
               </FadeIn>
             </div>

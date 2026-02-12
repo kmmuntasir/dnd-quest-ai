@@ -19,10 +19,12 @@ const adventuresRouter = require('./routes/adventures');
 const gamesRouter = require('./routes/games');
 const savedGamesRouter = require('./routes/savedGames');
 const settingsRouter = require('./routes/settings');
+const imagesRouter = require('./routes/images');
 app.use('/api/adventures', adventuresRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/saved-games', savedGamesRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/images', imagesRouter);
 
 app.get('/', (req, res) => {
   res.json({

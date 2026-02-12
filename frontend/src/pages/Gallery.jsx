@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Maximize2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Download, Maximize2, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
-import { Image } from '../components/ui/Image';
+import { Image, resolveImageUrl } from '../components/ui/Image';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -18,6 +18,8 @@ export function Gallery() {
   const [scenes, setScenes] = useState([]);
   const [selectedScene, setSelectedScene] = useState(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [imageVersion, setImageVersion] = useState(0); // Used to force image refresh
 
   useEffect(() => {
     loadAdventure();
@@ -53,6 +55,25 @@ export function Gallery() {
     const newIndex = currentIndex + direction;
     if (newIndex >= 0 && newIndex < scenes.length) {
       setSelectedScene(scenes[newIndex]);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!selectedScene?.image_hash || regenerating) return;
+
+    try {
+      setRegenerating(true);
+      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${selectedScene.image_hash}/regenerate`);
+
+      if (response.data.success) {
+        // Force image refresh by updating version
+        setImageVersion(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Failed to regenerate image:', error);
+      alert(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -164,7 +185,7 @@ export function Gallery() {
                   {/* Image Container */}
                   <div className="relative flex-shrink-0 lg:max-w-[60%] flex items-center justify-center">
                     <img
-                      src={selectedScene.image_url}
+                      src={`${resolveImageUrl(selectedScene.image_url)}${imageVersion > 0 ? `?v=${imageVersion}` : ''}`}
                       alt={`Scene ${scenes.findIndex(s => s.id === selectedScene.id) + 1}`}
                       className="max-w-full max-h-[55vh] lg:max-h-[65vh] object-contain rounded-lg"
                     />
@@ -174,6 +195,19 @@ export function Gallery() {
                       <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-accent-gold text-background-dark font-bold text-sm">
                         Key Scene
                       </div>
+                    )}
+
+                    {/* Regenerate button */}
+                    {selectedScene.image_hash && (
+                      <button
+                        onClick={handleRegenerate}
+                        disabled={regenerating}
+                        className="absolute bottom-4 right-4 px-3 py-2 rounded-lg bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
+                        title="Regenerate image with new AI variation"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
+                        {regenerating ? 'Regenerating...' : 'Regenerate'}
+                      </button>
                     )}
                   </div>
 
@@ -203,7 +237,7 @@ export function Gallery() {
                       }`}
                     >
                       <img
-                        src={scene.image_url}
+                        src={resolveImageUrl(scene.image_url)}
                         alt={`Thumbnail ${index + 1}`}
                         className="w-full h-full object-cover"
                       />

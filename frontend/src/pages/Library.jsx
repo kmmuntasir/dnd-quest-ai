@@ -28,7 +28,7 @@ const difficultyColors = {
 };
 
 // Play History Modal Component
-function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGallery, onDelete }) {
+function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGallery, onDeleteAdventure }) {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,7 +48,7 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
     }
   };
 
-  const handleDelete = async (gameId) => {
+  const handleDeleteGame = async (gameId) => {
     if (!window.confirm('Are you sure you want to delete this playthrough?')) return;
 
     try {
@@ -60,6 +60,19 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
     } catch (error) {
       console.error('Failed to delete game:', error);
       alert(error.response?.data?.error || 'Failed to delete game.');
+    }
+  };
+
+  const handleDeleteAdventure = async () => {
+    if (!window.confirm('Are you sure you want to delete this entire adventure? This will delete all playthroughs and cannot be undone.')) return;
+
+    try {
+      await axios.delete(`${API_BASE_URL}/adventures/${adventure.adventure_id}`);
+      onDeleteAdventure(adventure.adventure_id);
+      onClose();
+    } catch (error) {
+      console.error('Failed to delete adventure:', error);
+      alert(error.response?.data?.error || 'Failed to delete adventure.');
     }
   };
 
@@ -123,7 +136,15 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
               className="gap-2"
             >
               <ImageIcon className="w-4 h-4" />
-              Gallery
+              Scenes
+            </Button>
+            <Button
+              onClick={handleDeleteAdventure}
+              variant="ghost"
+              className="gap-2 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+              title="Delete adventure"
+            >
+              <Trash2 className="w-4 h-4" />
             </Button>
           </div>
 
@@ -203,7 +224,7 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
                             Continue
                           </Button>
                           <button
-                            onClick={() => handleDelete(game.id)}
+                            onClick={() => handleDeleteGame(game.id)}
                             className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
                             title="Delete playthrough"
                           >
@@ -266,6 +287,11 @@ export function Library() {
   const handleViewGallery = (adventureId) => {
     setSelectedAdventure(null);
     navigate(`/gallery/${adventureId}`);
+  };
+
+  const handleDeleteAdventure = (adventureId) => {
+    // Remove adventure from list after deletion
+    setAdventures(adventures.filter(a => a.adventure_id !== adventureId));
   };
 
   // Show story generator if action=generate
@@ -401,6 +427,7 @@ export function Library() {
           onResume={handleResume}
           onNewGame={handleNewGame}
           onViewGallery={handleViewGallery}
+          onDeleteAdventure={handleDeleteAdventure}
         />
       )}
     </div>

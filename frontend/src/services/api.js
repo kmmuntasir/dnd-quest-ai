@@ -69,7 +69,8 @@ api.interceptors.response.use(
 export const adventuresAPI = {
   generate: (data) => api.post('/api/adventures/generate', data),
   getById: (id) => api.get(`/api/adventures/${id}`),
-  getAll: () => api.get('/api/adventures')
+  getAll: () => api.get('/api/adventures'),
+  delete: (id) => api.delete(`/api/adventures/${id}`)
 };
 
 /**
