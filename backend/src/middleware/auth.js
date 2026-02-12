@@ -78,28 +78,6 @@ async function optionalAuth(req, res, next) {
 }
 
 /**
- * Middleware to check if user owns a resource
- * @param {string} resourceType - Type of resource ('adventure', 'game', 'settings')
- * @param {string} paramName - Name of the parameter containing the resource ID
- */
-function requireOwnership(resourceType, paramName = 'id') {
-  return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({
-        error: 'Authentication required',
-        message: 'Please log in to access this resource'
-      });
-    }
-
-    const resourceId = req.params[paramName];
-
-    // For now, we'll check ownership in the route handlers
-    // This middleware just ensures user is authenticated
-    next();
-  };
-}
-
-/**
  * Generate a new token for an authenticated user
  */
 function refreshToken(req, res, next) {
@@ -115,6 +93,5 @@ function refreshToken(req, res, next) {
 module.exports = {
   requireAuth,
   optionalAuth,
-  requireOwnership,
   refreshToken
 };

@@ -22,11 +22,37 @@ const db = new sqlite3.Database(dbPath, (err) => {
   logger.info('Connected to database', { path: dbPath });
 });
 
-// Enable foreign keys
-db.run('PRAGMA foreign_keys = ON', (err) => {
-  if (err) {
-    logger.error('Failed to enable foreign keys', { error: err.message });
-  }
+// Configure SQLite for better performance and concurrency
+db.serialize(() => {
+  // Enable WAL mode for better concurrent access
+  db.run('PRAGMA journal_mode = WAL', (err) => {
+    if (err) {
+      logger.warn('Failed to enable WAL mode', { error: err.message });
+    } else {
+      logger.info('SQLite WAL mode enabled');
+    }
+  });
+
+  // Set busy timeout to 5 seconds for concurrent access
+  db.run('PRAGMA busy_timeout = 5000', (err) => {
+    if (err) {
+      logger.warn('Failed to set busy timeout', { error: err.message });
+    }
+  });
+
+  // Enable foreign keys
+  db.run('PRAGMA foreign_keys = ON', (err) => {
+    if (err) {
+      logger.error('Failed to enable foreign keys', { error: err.message });
+    }
+  });
+
+  // Set synchronous mode for better performance (NORMAL is safe with WAL)
+  db.run('PRAGMA synchronous = NORMAL', (err) => {
+    if (err) {
+      logger.warn('Failed to set synchronous mode', { error: err.message });
+    }
+  });
 });
 
 /**
@@ -335,13 +361,30 @@ async function runMigrations() {
  */
 async function createIndexes() {
   const indexes = [
+    // Users table indexes (for authentication lookups)
+    'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+    'CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)',
+
+    // Scenes indexes
     'CREATE INDEX IF NOT EXISTS idx_scenes_adventure_id ON scenes(adventure_id)',
     'CREATE INDEX IF NOT EXISTS idx_scenes_order ON scenes(adventure_id, scene_order)',
+
+    // NPCs index
     'CREATE INDEX IF NOT EXISTS idx_npcs_adventure_id ON npcs(adventure_id)',
+
+    // Saved games indexes
     'CREATE INDEX IF NOT EXISTS idx_saved_games_adventure ON saved_games(adventure_id)',
     'CREATE INDEX IF NOT EXISTS idx_saved_games_user ON saved_games(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_saved_games_last_played ON saved_games(last_played)',
+
+    // Adventures index
     'CREATE INDEX IF NOT EXISTS idx_adventures_user ON adventures(user_id)',
-    'CREATE INDEX IF NOT EXISTS idx_images_hash ON images(hash)'
+
+    // Images index
+    'CREATE INDEX IF NOT EXISTS idx_images_hash ON images(hash)',
+
+    // Settings index for user-specific settings
+    'CREATE INDEX IF NOT EXISTS idx_settings_user ON settings(user_id)'
   ];
 
   for (const indexSql of indexes) {

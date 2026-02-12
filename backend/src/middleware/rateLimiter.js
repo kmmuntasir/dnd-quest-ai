@@ -84,8 +84,62 @@ const createConditionalLimiter = (limiter) => {
   };
 };
 
+/**
+ * Create a user-based rate limiter
+ * Uses user ID if authenticated, otherwise falls back to IP
+ * @param {object} options - Rate limiter options
+ * @param {number} options.windowMs - Time window in milliseconds
+ * @param {number} options.max - Maximum requests per window
+ * @param {string} options.name - Name for logging
+ * @returns {Function} Express middleware
+ */
+const createUserLimiter = ({ windowMs = 15 * 60 * 1000, max = 10, name = 'user-limiter' }) => {
+  const limiter = rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Use user ID if authenticated, otherwise fall back to IP
+    // Using req.ip as fallback (express-rate-limit handles IPv6 properly)
+    keyGenerator: (req) => {
+      if (req.user?.id) {
+        return `user:${req.user.id}`;
+      }
+      // Fall back to default behavior (uses req.ip with proper IPv6 handling)
+      return req.ip;
+    },
+    message: {
+      error: 'Too many requests',
+      message: 'Please wait before making more requests.'
+    },
+    handler: (req, res, next, options) => {
+      logger.warn(`${name} rate limit exceeded`, {
+        userId: req.user?.id,
+        ip: req.ip,
+        path: req.path,
+        method: req.method
+      });
+      res.status(429).json(options.message);
+    }
+  });
+
+  return createConditionalLimiter(limiter);
+};
+
+/**
+ * User-based AI generation rate limiter
+ * 10 requests per 15 minutes per user (or IP if not authenticated)
+ */
+const userAiLimiter = createUserLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  name: 'user-ai'
+});
+
 module.exports = {
   generalLimiter: createConditionalLimiter(generalLimiter),
   aiLimiter: createConditionalLimiter(aiLimiter),
-  authLimiter: createConditionalLimiter(authLimiter)
+  authLimiter: createConditionalLimiter(authLimiter),
+  createUserLimiter,
+  userAiLimiter
 };

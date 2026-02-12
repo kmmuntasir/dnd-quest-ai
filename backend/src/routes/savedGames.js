@@ -65,10 +65,16 @@ router.get('/adventures/:adventureId/games', requireAuth, async (req, res) => {
         sg.created_at,
         sg.last_played,
         sg.current_scene_id,
-        (SELECT s.scene_order FROM scenes s WHERE s.id = sg.current_scene_id) as current_scene_order,
-        (SELECT s.image_url FROM scenes s WHERE s.id = sg.current_scene_id) as scene_image_url,
-        (SELECT COUNT(*) FROM scenes s WHERE s.adventure_id = sg.adventure_id) as total_scenes
+        current_scene.scene_order as current_scene_order,
+        current_scene.image_url as scene_image_url,
+        scene_counts.total_scenes
       FROM saved_games sg
+      LEFT JOIN scenes current_scene ON current_scene.id = sg.current_scene_id
+      LEFT JOIN (
+        SELECT adventure_id, COUNT(*) as total_scenes
+        FROM scenes
+        GROUP BY adventure_id
+      ) scene_counts ON scene_counts.adventure_id = sg.adventure_id
       WHERE sg.adventure_id = ? AND sg.user_id = ?
       ORDER BY sg.last_played DESC
     `, [adventureId, userId]);
@@ -150,7 +156,7 @@ router.get('/', requireAuth, async (req, res) => {
     const countResult = await db.get(countQuery, params);
     const total = countResult.total;
 
-    // Get paginated results with scene image
+    // Get paginated results with scene image using JOINs (avoids N+1 queries)
     const savedGames = await db.all(`
       SELECT
         sg.id,
@@ -165,11 +171,17 @@ router.get('/', requireAuth, async (req, res) => {
         a.title as adventure_title,
         a.difficulty,
         a.description as adventure_description,
-        (SELECT COUNT(*) FROM scenes s WHERE s.adventure_id = a.id) as total_scenes,
-        (SELECT s.image_url FROM scenes s WHERE s.id = sg.current_scene_id LIMIT 1) as scene_image_url,
-        (SELECT s.description FROM scenes s WHERE s.id = sg.current_scene_id LIMIT 1) as scene_description
+        scene_counts.total_scenes,
+        current_scene.image_url as scene_image_url,
+        current_scene.description as scene_description
       FROM saved_games sg
       JOIN adventures a ON sg.adventure_id = a.id
+      LEFT JOIN scenes current_scene ON current_scene.id = sg.current_scene_id
+      LEFT JOIN (
+        SELECT adventure_id, COUNT(*) as total_scenes
+        FROM scenes
+        GROUP BY adventure_id
+      ) scene_counts ON scene_counts.adventure_id = a.id
       ${whereClause}
       ORDER BY ${field} ${order}
       LIMIT ? OFFSET ?
