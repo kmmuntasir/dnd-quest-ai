@@ -84,6 +84,12 @@ export function Game() {
       if (data.gameOver) {
         alert(data.victory ? 'Congratulations! You won!' : 'Game Over! You have been defeated.');
         // Could navigate to a game over screen here
+      } else if (data.nextScene) {
+        // Progress to next scene after a short delay to show narrative
+        setTimeout(() => {
+          setCurrentScene(data.nextScene);
+          setNarrative(null); // Clear narrative for new scene
+        }, 1500);
       }
 
       // Reset for next choice

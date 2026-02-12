@@ -294,19 +294,57 @@ router.post('/:id/choice', async (req, res) => {
       stats: updatedStats
     });
 
-    // Update saved game
-    db.prepare(`
-      UPDATE saved_games
-      SET stats = ?, hp = ?, gold = ?, inventory = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(
-      JSON.stringify(updatedStats),
-      updatedHP,
-      updatedGold,
-      JSON.stringify(updatedInventory),
-      JSON.stringify(gameHistory),
-      id
-    );
+    // Get next scene (by scene_order)
+    const nextScene = db.prepare(`
+      SELECT * FROM scenes
+      WHERE adventure_id = ? AND scene_order > ?
+      ORDER BY scene_order ASC
+      LIMIT 1
+    `).get(savedGame.adventure_id, scene.scene_order);
+
+    let nextSceneData = null;
+    let isGameOver = false;
+    let isVictory = false;
+
+    if (nextScene) {
+      // Progress to next scene
+      db.prepare(`
+        UPDATE saved_games
+        SET stats = ?, hp = ?, gold = ?, inventory = ?, current_scene_id = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        JSON.stringify(updatedStats),
+        updatedHP,
+        updatedGold,
+        JSON.stringify(updatedInventory),
+        nextScene.id,
+        JSON.stringify(gameHistory),
+        id
+      );
+
+      nextSceneData = {
+        ...nextScene,
+        choices: JSON.parse(nextScene.choices),
+        is_key_scene: Boolean(nextScene.is_key_scene)
+      };
+    } else {
+      // No more scenes - victory!
+      isVictory = true;
+      isGameOver = true;
+
+      db.prepare(`
+        UPDATE saved_games
+        SET stats = ?, hp = ?, gold = ?, inventory = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+        JSON.stringify(updatedStats),
+        updatedHP,
+        updatedGold,
+        JSON.stringify(updatedInventory),
+        JSON.stringify(gameHistory),
+        id
+      );
+    }
 
     res.json({
       narrative: response.narrative,
@@ -318,7 +356,9 @@ router.post('/:id/choice', async (req, res) => {
         inventory: updatedInventory,
         newItem: response.newItem
       },
-      nextScenePrompt: response.nextScenePrompt
+      nextScene: nextSceneData,
+      gameOver: isGameOver,
+      victory: isVictory
     });
   } catch (error) {
     console.error('Error submitting choice:', error);
