@@ -39,24 +39,13 @@ async function generateImage(prompt, options = {}) {
     // Add nologo if API key is available (removes watermark)
     if (POLLINATIONS_API_KEY) {
       params.append('nologo', 'true');
-      params.append('token', POLLINATIONS_API_KEY);
     }
 
     const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?${params.toString()}`;
 
-    // Test if the image is accessible (with timeout)
-    // Include Authorization header if API key is available
-    const headers = {};
-    if (POLLINATIONS_API_KEY) {
-      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
-    }
-
-    await axios.head(imageUrl, {
-      timeout: 15000,
-      headers,
-      validateStatus: (status) => status === 200
-    });
-
+    // Note: Pollinations.ai generates images on-demand when the URL is accessed.
+    // We return the URL immediately and let the browser fetch it.
+    // This is faster and more reliable than waiting for generation.
     return imageUrl;
   } catch (error) {
     console.error('Pollinations.ai error:', error.message);
@@ -111,23 +100,23 @@ async function testConnection() {
     // Add nologo if API key is available (removes watermark)
     if (POLLINATIONS_API_KEY) {
       params.append('nologo', 'true');
-      params.append('token', POLLINATIONS_API_KEY);
     }
 
     const testUrl = `https://image.pollinations.ai/prompt/test?${params.toString()}`;
 
-    // Include Authorization header if API key is available
     const headers = {};
     if (POLLINATIONS_API_KEY) {
       headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
     }
 
-    await axios.head(testUrl, {
-      timeout: 15000,
+    // Use GET with longer timeout (60s) since image generation takes time
+    const response = await axios.get(testUrl, {
+      timeout: 60000,
       headers,
-      validateStatus: (status) => status === 200
+      responseType: 'arraybuffer'
     });
-    return true;
+
+    return response.status === 200 && response.data.byteLength > 0;
   } catch (error) {
     console.error('Pollinations.ai connection test failed:', error.message);
     return false;
