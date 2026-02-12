@@ -96,13 +96,13 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="relative h-32 overflow-hidden">
+          <div className="relative aspect-[4/3] overflow-hidden">
             <Image
               src={adventure.cover_image_url}
               alt={adventure.title}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-background-card via-background-card/50 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background-card via-background-card/30 to-transparent" />
             <button
               onClick={onClose}
               className="absolute top-4 right-4 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
