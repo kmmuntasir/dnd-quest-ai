@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, Shield, Wand, Eye, Heart, Swords } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Card, CardBody, CardFooter } from '../components/ui/Card';
-import { LoadingSpinner, LoadingPage } from '../components/ui/LoadingSpinner';
+import { Button } from '../../ui/Button';
+import { Card, CardBody, CardFooter } from '../../ui/Card';
+import { LoadingSpinner, LoadingPage } from '../../ui/LoadingSpinner';
 
 const classes = [
   {

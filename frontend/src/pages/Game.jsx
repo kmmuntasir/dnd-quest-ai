@@ -4,9 +4,9 @@ import { Swords, Heart, Coins, Backpack } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Image } from '../components/ui/Image';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
-import { CharacterCreation } from './CharacterCreation';
-import { DiceRoller } from './DiceRoller';
-import { ChoicesList } from './Choices';
+import { CharacterCreation } from '../components/game/CharacterCreation';
+import { DiceRoller } from '../components/game/DiceRoller';
+import { ChoicesList } from '../components/game/Choices';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 
 export function Game() {

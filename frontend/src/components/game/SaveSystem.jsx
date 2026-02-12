@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Backpack, Check, AlertCircle } from 'lucide-react';
-import { Modal } from '../components/ui/Modal';
-import { Button } from '../components/ui/Button';
-import { Toast } from '../components/ui/Toast';
+import { Modal } from '../../ui/Modal';
+import { Button } from '../../ui/Button';
+import { Toast } from '../../ui/Toast';
 
 export function SaveButton({ onSave, disabled = false, saving = false }) {
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
