@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight, Zap } from 'lucide-react';
-import { Button } from '../../ui/Button';
-import { Card, CardBody } from '../../ui/Card';
-import { Input, Textarea, Select } from '../../ui/Input';
-import { LoadingSpinner } from '../../ui/LoadingSpinner';
+import { Button } from '../ui/Button';
+import { Card, CardBody } from '../ui/Card';
+import { Input, Textarea, Select } from '../ui/Input';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 const themes = [
   { value: 'fantasy', label: 'Fantasy' },
