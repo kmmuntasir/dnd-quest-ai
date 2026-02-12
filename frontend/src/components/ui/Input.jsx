@@ -108,6 +108,7 @@ export function Select({
   placeholder = 'Select...',
   required = false,
   'aria-label': ariaLabel,
+  'aria-describedby': ariaDescribedby,
   className = '',
   ...props
 }) {

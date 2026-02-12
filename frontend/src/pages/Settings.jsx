@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Palette, Sliders, Volume2, Shield, Check } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Input';
 import { Toast } from '../components/ui/Toast';
 
