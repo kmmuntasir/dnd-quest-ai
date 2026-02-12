@@ -1,8 +1,14 @@
 require('dotenv').config();
+
+// Validate environment variables before starting
+const { validateEnv } = require('./config/validateEnv');
+validateEnv();
+
 const express = require('express');
 const cors = require('cors');
 
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { generalLimiter } = require('./middleware/rateLimiter');
 const { logger, httpLogger } = require('./utils/logger');
 
 const app = express();
@@ -10,16 +16,21 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' })); // Add request size limit
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(httpLogger);
 
+// Apply general rate limiting to all API routes
+app.use('/api', generalLimiter);
+
 // Routes
+const authRouter = require('./routes/auth');
 const adventuresRouter = require('./routes/adventures');
 const gamesRouter = require('./routes/games');
 const savedGamesRouter = require('./routes/savedGames');
 const settingsRouter = require('./routes/settings');
 const imagesRouter = require('./routes/images');
+app.use('/api/auth', authRouter);
 app.use('/api/adventures', adventuresRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/saved-games', savedGamesRouter);

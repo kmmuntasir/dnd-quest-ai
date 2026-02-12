@@ -12,6 +12,18 @@ db.pragma('foreign_keys = ON');
 
 // Initialize database schema
 function initializeDatabase() {
+  // Users table - stores user accounts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_login TIMESTAMP
+    )
+  `);
+
   // Images table - stores image metadata and cache info
   db.exec(`
     CREATE TABLE IF NOT EXISTS images (
@@ -142,6 +154,30 @@ function runMigrations() {
     if (!hasPortraitHash) {
       console.log('Adding portrait_hash column to npcs table...');
       db.exec('ALTER TABLE npcs ADD COLUMN portrait_hash TEXT');
+    }
+
+    // Add user_id column to adventures table
+    const adventuresInfo = db.prepare("PRAGMA table_info(adventures)").all();
+    const adventuresHasUserId = adventuresInfo.some(col => col.name === 'user_id');
+    if (!adventuresHasUserId) {
+      console.log('Adding user_id column to adventures table...');
+      db.exec('ALTER TABLE adventures ADD COLUMN user_id INTEGER REFERENCES users(id)');
+    }
+
+    // Add user_id column to saved_games table
+    const savedGamesInfo = db.prepare("PRAGMA table_info(saved_games)").all();
+    const savedGamesHasUserId = savedGamesInfo.some(col => col.name === 'user_id');
+    if (!savedGamesHasUserId) {
+      console.log('Adding user_id column to saved_games table...');
+      db.exec('ALTER TABLE saved_games ADD COLUMN user_id INTEGER REFERENCES users(id)');
+    }
+
+    // Add user_id column to settings table
+    const settingsInfo = db.prepare("PRAGMA table_info(settings)").all();
+    const settingsHasUserId = settingsInfo.some(col => col.name === 'user_id');
+    if (!settingsHasUserId) {
+      console.log('Adding user_id column to settings table...');
+      db.exec('ALTER TABLE settings ADD COLUMN user_id INTEGER REFERENCES users(id)');
     }
   } catch (error) {
     console.log('Migration check:', error.message);

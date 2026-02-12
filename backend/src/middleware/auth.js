@@ -1,0 +1,106 @@
+const authService = require('../services/authService');
+const { logger } = require('../utils/logger');
+
+/**
+ * Middleware to require authentication
+ * Attaches user to req.user if authenticated, returns 401 if not
+ */
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({
+      error: 'Authentication required',
+      message: 'Please log in to access this resource'
+    });
+  }
+
+  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  const decoded = authService.verifyToken(token);
+
+  if (!decoded) {
+    return res.status(401).json({
+      error: 'Invalid token',
+      message: 'Please log in again'
+    });
+  }
+
+  // Get full user from database
+  const user = authService.getUserById(decoded.id);
+  if (!user) {
+    return res.status(401).json({
+      error: 'User not found',
+      message: 'Please log in again'
+    });
+  }
+
+  // Attach user to request
+  req.user = user;
+  next();
+}
+
+/**
+ * Middleware to optionally attach user if authenticated
+ * Does not block if not authenticated, but attaches req.user if valid token
+ */
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.substring(7);
+  const decoded = authService.verifyToken(token);
+
+  if (decoded) {
+    const user = authService.getUserById(decoded.id);
+    if (user) {
+      req.user = user;
+    }
+  }
+
+  next();
+}
+
+/**
+ * Middleware to check if user owns a resource
+ * @param {string} resourceType - Type of resource ('adventure', 'game', 'settings')
+ * @param {string} paramName - Name of the parameter containing the resource ID
+ */
+function requireOwnership(resourceType, paramName = 'id') {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Authentication required',
+        message: 'Please log in to access this resource'
+      });
+    }
+
+    const resourceId = req.params[paramName];
+
+    // For now, we'll check ownership in the route handlers
+    // This middleware just ensures user is authenticated
+    next();
+  };
+}
+
+/**
+ * Generate a new token for an authenticated user
+ */
+function refreshToken(req, res, next) {
+  if (!req.user) {
+    return next();
+  }
+
+  const newToken = authService.generateToken(req.user);
+  res.locals.newToken = newToken;
+  next();
+}
+
+module.exports = {
+  requireAuth,
+  optionalAuth,
+  requireOwnership,
+  refreshToken
+};

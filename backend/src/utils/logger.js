@@ -1,9 +1,52 @@
 const winston = require('winston');
 
+// Sensitive key patterns to redact from logs
+const sensitivePatterns = [
+  /api[_-]?key/gi,
+  /secret/gi,
+  /password/gi,
+  /token/gi,
+  /authorization/gi,
+  /bearer/gi,
+  /gsk_/gi,  // Groq API key prefix
+  /sk_/gi    // Common API key prefix
+];
+
+/**
+ * Redact sensitive values from log metadata
+ */
+const redactSensitive = winston.format((info) => {
+  const redact = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+
+    for (const key of Object.keys(obj)) {
+      // Check if key name is sensitive
+      const isSensitiveKey = sensitivePatterns.some(pattern => pattern.test(key));
+
+      if (isSensitiveKey && typeof obj[key] === 'string') {
+        // Mask the value
+        if (obj[key].length <= 8) {
+          obj[key] = '***';
+        } else {
+          obj[key] = obj[key].substring(0, 4) + '...' + obj[key].substring(obj[key].length - 4);
+        }
+      } else if (typeof obj[key] === 'object') {
+        redact(obj[key]);
+      }
+    }
+    return obj;
+  };
+
+  if (info.meta) redact(info.meta);
+  redact(info);
+  return info;
+});
+
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
   winston.format.splat(),
+  redactSensitive(),
   winston.format.json()
 );
 

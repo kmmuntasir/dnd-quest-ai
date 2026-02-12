@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const groqService = require('../services/groqService');
+const { aiLimiter } = require('../middleware/rateLimiter');
+const { validate } = require('../middleware/validate');
+const { logger } = require('../utils/logger');
+const {
+  startGameSchema,
+  gameIdSchema,
+  choiceSchema,
+  validClasses
+} = require('../validations/game.schema');
 
 /**
  * Roll 3d6 for character stats
@@ -36,24 +45,9 @@ function calculateStartingHP(characterClass, constitution) {
  * POST /api/games/start
  * Start a new game
  */
-router.post('/start', async (req, res) => {
+router.post('/start', validate(startGameSchema), async (req, res) => {
   try {
     const { adventureId, characterName, characterClass } = req.body;
-
-    // Validate input
-    if (!adventureId || !characterName || !characterClass) {
-      return res.status(400).json({
-        error: 'Missing required fields: adventureId, characterName, characterClass'
-      });
-    }
-
-    // Validate character class
-    const validClasses = ['Fighter', 'Wizard', 'Rogue', 'Cleric', 'Ranger'];
-    if (!validClasses.includes(characterClass)) {
-      return res.status(400).json({
-        error: `Invalid class. Must be: ${validClasses.join(', ')}`
-      });
-    }
 
     // Check if adventure exists
     const adventure = db.prepare('SELECT * FROM adventures WHERE id = ?').get(adventureId);
@@ -108,6 +102,8 @@ router.post('/start', async (req, res) => {
 
     const gameId = result.lastInsertRowid;
 
+    logger.info('Game started', { gameId, adventureId, characterName, characterClass });
+
     res.json({
       gameId,
       character: {
@@ -127,7 +123,7 @@ router.post('/start', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error starting game:', error);
+    logger.error('Error starting game', { error: error.message });
     res.status(500).json({
       error: 'Failed to start game',
       details: error.message
@@ -139,7 +135,7 @@ router.post('/start', async (req, res) => {
  * GET /api/games/:id
  * Get current game state
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', validate(gameIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -183,7 +179,7 @@ router.get('/:id', (req, res) => {
       lastPlayed: savedGame.last_played
     });
   } catch (error) {
-    console.error('Error fetching game:', error);
+    logger.error('Error fetching game', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch game',
       details: error.message
@@ -195,22 +191,10 @@ router.get('/:id', (req, res) => {
  * POST /api/games/:id/choice
  * Submit player choice
  */
-router.post('/:id/choice', async (req, res) => {
+router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSchema), aiLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { choiceIndex, diceRoll } = req.body;
-
-    // Validate input
-    if (choiceIndex === undefined || diceRoll === undefined) {
-      return res.status(400).json({
-        error: 'Missing required fields: choiceIndex, diceRoll'
-      });
-    }
-
-    // Validate dice roll
-    if (diceRoll < 1 || diceRoll > 20) {
-      return res.status(400).json({ error: 'Dice roll must be between 1 and 20' });
-    }
 
     // Get saved game
     const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
@@ -236,7 +220,7 @@ router.post('/:id/choice', async (req, res) => {
     const stats = JSON.parse(savedGame.stats);
 
     // Generate scene response using Groq
-    console.log('Generating scene response...');
+    logger.info('Generating scene response', { gameId: id });
     const response = await groqService.generateSceneResponse({
       playerChoice,
       diceRoll,
@@ -312,9 +296,6 @@ router.post('/:id/choice', async (req, res) => {
       LIMIT 1
     `).get(savedGame.adventure_id, scene.scene_order);
 
-    console.log('Current scene order:', scene.scene_order);
-    console.log('Next scene found:', nextScene ? `Scene ${nextScene.scene_order}` : 'None');
-
     let nextSceneData = null;
     let isGameOver = false;
     let isVictory = false;
@@ -374,7 +355,7 @@ router.post('/:id/choice', async (req, res) => {
       victory: isVictory
     });
   } catch (error) {
-    console.error('Error submitting choice:', error);
+    logger.error('Error submitting choice', { error: error.message });
     res.status(500).json({
       error: 'Failed to submit choice',
       details: error.message
@@ -386,7 +367,7 @@ router.post('/:id/choice', async (req, res) => {
  * POST /api/games/:id/go-back
  * Go back to previous scene (not available in hard mode)
  */
-router.post('/:id/go-back', (req, res) => {
+router.post('/:id/go-back', validate(gameIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -465,7 +446,7 @@ router.post('/:id/go-back', (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error going back:', error);
+    logger.error('Error going back', { error: error.message });
     res.status(500).json({
       error: 'Failed to go back',
       details: error.message
@@ -477,7 +458,7 @@ router.post('/:id/go-back', (req, res) => {
  * POST /api/games/:id/save
  * Manual save
  */
-router.post('/:id/save', (req, res) => {
+router.post('/:id/save', validate(gameIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -490,7 +471,7 @@ router.post('/:id/save', (req, res) => {
 
     res.json({ success: true, message: 'Game saved successfully' });
   } catch (error) {
-    console.error('Error saving game:', error);
+    logger.error('Error saving game', { error: error.message });
     res.status(500).json({
       error: 'Failed to save game',
       details: error.message
@@ -502,7 +483,7 @@ router.post('/:id/save', (req, res) => {
  * POST /api/games/:id/restart
  * Restart game with same character (reset to first scene, restore HP)
  */
-router.post('/:id/restart', (req, res) => {
+router.post('/:id/restart', validate(gameIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -526,15 +507,7 @@ router.post('/:id/restart', (req, res) => {
 
     // Calculate max HP from class and CON
     const stats = JSON.parse(savedGame.stats);
-    const conMod = Math.floor((stats.CON - 10) / 2);
-    const baseHP = {
-      'Fighter': 10,
-      'Wizard': 6,
-      'Rogue': 8,
-      'Cleric': 8,
-      'Ranger': 10
-    };
-    const maxHp = (baseHP[savedGame.character_class] || 8) + conMod;
+    const maxHp = calculateStartingHP(savedGame.character_class, stats.CON);
 
     // Reset game to first scene, restore HP, clear history
     db.prepare(`
@@ -547,6 +520,8 @@ router.post('/:id/restart', (req, res) => {
           last_played = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(firstScene.id, maxHp, id);
+
+    logger.info('Game restarted', { gameId: id });
 
     res.json({
       success: true,
@@ -563,7 +538,7 @@ router.post('/:id/restart', (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error restarting game:', error);
+    logger.error('Error restarting game', { error: error.message });
     res.status(500).json({
       error: 'Failed to restart game',
       details: error.message

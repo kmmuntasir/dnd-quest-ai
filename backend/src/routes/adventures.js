@@ -3,28 +3,30 @@ const router = express.Router();
 const db = require('../config/database');
 const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
+const { aiLimiter } = require('../middleware/rateLimiter');
+const { validate, validateAll } = require('../middleware/validate');
+const { logger } = require('../utils/logger');
+const {
+  generateCharacterNameSchema,
+  generateContextSchema,
+  generateAdventureSchema,
+  adventureIdSchema
+} = require('../validations/adventure.schema');
 
 /**
  * POST /api/adventures/generate-character-name
  * Generate AI character name
  */
-router.post('/generate-character-name', async (req, res) => {
+router.post('/generate-character-name', aiLimiter, validate(generateCharacterNameSchema), async (req, res) => {
   try {
     const { characterClass } = req.body;
 
-    // Validate input
-    if (!characterClass) {
-      return res.status(400).json({
-        error: 'Missing required field: characterClass'
-      });
-    }
-
-    console.log('Generating character name for class:', characterClass);
+    logger.info('Generating character name', { characterClass });
     const name = await groqService.generateCharacterName({ characterClass });
 
     res.json({ name });
   } catch (error) {
-    console.error('Error generating character name:', error);
+    logger.error('Error generating character name', { error: error.message });
     res.status(500).json({
       error: 'Failed to generate character name',
       details: error.message
@@ -36,23 +38,16 @@ router.post('/generate-character-name', async (req, res) => {
  * POST /api/adventures/generate-context
  * Generate AI context suggestion for story
  */
-router.post('/generate-context', async (req, res) => {
+router.post('/generate-context', aiLimiter, validate(generateContextSchema), async (req, res) => {
   try {
     const { theme, tone, difficulty } = req.body;
 
-    // Validate input
-    if (!theme || !tone || !difficulty) {
-      return res.status(400).json({
-        error: 'Missing required fields: theme, tone, difficulty'
-      });
-    }
-
-    console.log('Generating story context...');
+    logger.info('Generating story context', { theme, tone, difficulty });
     const context = await groqService.generateContext({ theme, tone, difficulty });
 
     res.json({ context });
   } catch (error) {
-    console.error('Error generating context:', error);
+    logger.error('Error generating context', { error: error.message });
     res.status(500).json({
       error: 'Failed to generate context',
       details: error.message
@@ -64,35 +59,12 @@ router.post('/generate-context', async (req, res) => {
  * POST /api/adventures/generate
  * Generate a new adventure
  */
-router.post('/generate', async (req, res) => {
+router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (req, res) => {
   try {
     const { theme, tone, difficulty, length, context } = req.body;
 
-    // Validate input
-    if (!theme || !tone || !difficulty) {
-      return res.status(400).json({
-        error: 'Missing required fields: theme, tone, difficulty'
-      });
-    }
-
-    // Validate difficulty
-    const validDifficulties = ['easy', 'medium', 'hard'];
-    if (!validDifficulties.includes(difficulty)) {
-      return res.status(400).json({
-        error: 'Invalid difficulty. Must be: easy, medium, or hard'
-      });
-    }
-
-    // Validate length
-    const validLengths = ['quick', 'standard', 'extended', 'ai'];
-    if (length && !validLengths.includes(length)) {
-      return res.status(400).json({
-        error: 'Invalid length. Must be: quick, standard, extended, or ai'
-      });
-    }
-
     // Generate adventure using Groq
-    console.log('Generating adventure with Groq...', { theme, tone, difficulty, length });
+    logger.info('Generating adventure', { theme, tone, difficulty, length });
     const adventure = await groqService.generateAdventure({
       theme,
       tone,
@@ -101,14 +73,14 @@ router.post('/generate', async (req, res) => {
       context
     });
 
-    console.log('Adventure generated. Generating images...');
+    logger.info('Adventure generated. Generating images...');
 
     // Validate that we have enough scenes
     const sceneCount = adventure.scenes?.length || 0;
     if (sceneCount < 2) {
-      console.warn(`Warning: Only ${sceneCount} scenes generated.`);
+      logger.warn(`Only ${sceneCount} scenes generated`);
     } else {
-      console.log(`Generated ${sceneCount} scenes for adventure.`);
+      logger.info(`Generated ${sceneCount} scenes for adventure`);
     }
     const scenesWithImages = await imageService.generateSceneImages(
       adventure.scenes,
@@ -176,7 +148,7 @@ router.post('/generate', async (req, res) => {
       );
     }
 
-    console.log('Adventure saved with ID:', adventureId);
+    logger.info('Adventure saved', { adventureId });
 
     res.json({
       adventureId,
@@ -192,7 +164,7 @@ router.post('/generate', async (req, res) => {
       npcs: npcsWithImages
     });
   } catch (error) {
-    console.error('Error generating adventure:', error);
+    logger.error('Error generating adventure', { error: error.message });
     res.status(500).json({
       error: 'Failed to generate adventure',
       details: error.message
@@ -204,7 +176,7 @@ router.post('/generate', async (req, res) => {
  * GET /api/adventures/:id
  * Get adventure details by ID
  */
-router.get('/:id', (req, res) => {
+router.get('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -234,7 +206,7 @@ router.get('/:id', (req, res) => {
       npcs
     });
   } catch (error) {
-    console.error('Error fetching adventure:', error);
+    logger.error('Error fetching adventure', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch adventure',
       details: error.message
@@ -252,7 +224,7 @@ router.get('/', (req, res) => {
 
     res.json(adventures);
   } catch (error) {
-    console.error('Error fetching adventures:', error);
+    logger.error('Error fetching adventures', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch adventures',
       details: error.message
@@ -264,7 +236,7 @@ router.get('/', (req, res) => {
  * DELETE /api/adventures/:id
  * Delete an adventure and all associated data (scenes, NPCs, saved games, cached images)
  */
-router.delete('/:id', (req, res) => {
+router.delete('/:id', validate(adventureIdSchema, 'params'), (req, res) => {
   try {
     const { id } = req.params;
 
@@ -275,7 +247,7 @@ router.delete('/:id', (req, res) => {
       return res.status(404).json({ error: 'Adventure not found' });
     }
 
-    console.log('Deleting adventure:', id);
+    logger.info('Deleting adventure', { adventureId: id });
 
     // Delete cached images first (before deleting database records)
     imageService.deleteAdventureImages(id);
@@ -292,11 +264,11 @@ router.delete('/:id', (req, res) => {
     // Delete adventure
     db.prepare('DELETE FROM adventures WHERE id = ?').run(id);
 
-    console.log('Adventure deleted successfully:', id);
+    logger.info('Adventure deleted successfully', { adventureId: id });
 
     res.json({ success: true, message: 'Adventure deleted successfully' });
   } catch (error) {
-    console.error('Error deleting adventure:', error);
+    logger.error('Error deleting adventure', { error: error.message });
     res.status(500).json({
       error: 'Failed to delete adventure',
       details: error.message
