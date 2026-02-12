@@ -10,6 +10,7 @@ const cors = require('cors');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { logger, httpLogger } = require('./utils/logger');
+const healthService = require('./services/healthService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,9 +46,31 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+// Liveness probe - always returns 200 if process is running
+app.get('/health/live', (req, res) => {
+  res.status(200).json(healthService.checkLiveness());
+});
+
+// Readiness probe - checks if service is ready to accept requests
+app.get('/health/ready', async (req, res) => {
+  const readiness = await healthService.checkReadiness();
+  const statusCode = readiness.status === 'ready' ? 200 : 503;
+  res.status(statusCode).json(readiness);
+});
+
+// Full health check - includes external dependencies
+app.get('/health', async (req, res) => {
+  const health = await healthService.runHealthChecks({ includeExternal: true });
+
+  // Return appropriate status code
+  let statusCode = 200;
+  if (health.status === 'unhealthy') {
+    statusCode = 503;
+  } else if (health.status === 'degraded') {
+    statusCode = 200; // Still operational but degraded
+  }
+
+  res.status(statusCode).json(health);
 });
 
 // 404 handler

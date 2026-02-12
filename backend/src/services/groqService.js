@@ -1,8 +1,85 @@
 const axios = require('axios');
+const { logger } = require('../utils/logger');
+const {
+  validateAdventureResponse,
+  validateSceneResponse,
+  validateContextResponse,
+  validateCharacterNameResponse
+} = require('../validations/ai.schema');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+// Retry configuration
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
+/**
+ * Sleep utility for retries
+ * @param {number} ms - Milliseconds to sleep
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Parse JSON with error handling
+ * @param {string} content - JSON string to parse
+ * @returns {Object|null} Parsed object or null
+ */
+function safeJsonParse(content) {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    logger.error('JSON parse error', { error: error.message, content: content.substring(0, 200) });
+    return null;
+  }
+}
+
+/**
+ * Make Groq API request with retry logic
+ * @param {Object} requestBody - Request body for Groq API
+ * @param {Object} options - Additional options
+ * @param {number} options.timeout - Request timeout
+ * @param {number} options.retries - Number of retries attempted
+ * @returns {Promise<Object>} API response
+ */
+async function makeGroqRequest(requestBody, options = {}) {
+  const { timeout = 30000, retries = 0 } = options;
+
+  try {
+    const response = await axios.post(
+      GROQ_API_URL,
+      requestBody,
+      {
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout
+      }
+    );
+
+    return response;
+  } catch (error) {
+    // Log error details
+    logger.error('Groq API error', {
+      error: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+
+    // Retry on network errors or 5xx errors
+    if (retries < MAX_RETRIES && (!error.response || error.response.status >= 500)) {
+      logger.info('Retrying Groq API request', { attempt: retries + 1 });
+      await sleep(RETRY_DELAY_MS * (retries + 1));
+      return makeGroqRequest(requestBody, { ...options, retries: retries + 1 });
+    }
+
+    throw error;
+  }
+}
 
 /**
  * Get scene count based on length parameter
@@ -88,32 +165,39 @@ Return ONLY valid JSON. No explanations, no markdown formatting. ${isAiDecided ?
   const userPrompt = 'Generate a D&D adventure based on the parameters above.';
 
   try {
-    const response = await axios.post(
-      GROQ_API_URL,
-      {
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.8,
-        max_tokens: 4000,
-        response_format: { type: 'json_object' }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+    const response = await makeGroqRequest({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.8,
+      max_tokens: 4000,
+      response_format: { type: 'json_object' }
+    }, { timeout: 45000 });
 
     const content = response.data.choices[0].message.content;
-    return JSON.parse(content);
+    const rawData = safeJsonParse(content);
+
+    if (!rawData) {
+      logger.error('Failed to parse adventure JSON');
+      throw new Error('Failed to parse AI response as JSON');
+    }
+
+    // Validate and sanitize the response
+    const validation = validateAdventureResponse(rawData);
+
+    if (!validation.success) {
+      logger.warn('Adventure validation had issues, using salvaged data', {
+        error: validation.error,
+        salvaged: validation.salvaged
+      });
+    }
+
+    return validation.data;
   } catch (error) {
-    console.error('Groq API error:', error.response?.data || error.message);
-    throw new Error('Failed to generate adventure: ' + (error.response?.data?.error?.message || error.message));
+    logger.error('Failed to generate adventure', { error: error.message });
+    throw new Error('Failed to generate adventure: ' + error.message);
   }
 }
 
@@ -154,32 +238,38 @@ Return ONLY valid JSON. No explanations, no markdown formatting.`;
   const userPrompt = 'Generate the outcome of the player\'s choice.';
 
   try {
-    const response = await axios.post(
-      GROQ_API_URL,
-      {
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.8,
-        max_tokens: 1000,
-        response_format: { type: 'json_object' }
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      }
-    );
+    const response = await makeGroqRequest({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.8,
+      max_tokens: 1000,
+      response_format: { type: 'json_object' }
+    }, { timeout: 30000 });
 
     const content = response.data.choices[0].message.content;
-    return JSON.parse(content);
+    const rawData = safeJsonParse(content);
+
+    if (!rawData) {
+      logger.error('Failed to parse scene response JSON');
+      throw new Error('Failed to parse AI response as JSON');
+    }
+
+    // Validate and sanitize the response
+    const validation = validateSceneResponse(rawData);
+
+    if (!validation.success) {
+      logger.warn('Scene response validation had issues, using salvaged data', {
+        error: validation.error
+      });
+    }
+
+    return validation.data;
   } catch (error) {
-    console.error('Groq API error:', error.response?.data || error.message);
-    throw new Error('Failed to generate scene response: ' + (error.response?.data?.error?.message || error.message));
+    logger.error('Failed to generate scene response', { error: error.message });
+    throw new Error('Failed to generate scene response: ' + error.message);
   }
 }
 
@@ -220,30 +310,23 @@ Examples:
 Return ONLY the story hook text. No JSON, no formatting, just the text.`;
 
   try {
-    const response = await axios.post(
-      GROQ_API_URL,
-      {
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Generate a creative story hook.' }
-        ],
-        temperature: 0.9,
-        max_tokens: 150
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000
-      }
-    );
+    const response = await makeGroqRequest({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate a creative story hook.' }
+      ],
+      temperature: 0.9,
+      max_tokens: 150
+    }, { timeout: 15000 });
 
-    return response.data.choices[0].message.content.trim();
+    const content = response.data.choices[0].message.content.trim();
+    const validation = validateContextResponse(content);
+
+    return validation.data;
   } catch (error) {
-    console.error('Groq API error generating context:', error.response?.data || error.message);
-    throw new Error('Failed to generate context: ' + (error.response?.data?.error?.message || error.message));
+    logger.error('Failed to generate context', { error: error.message });
+    throw new Error('Failed to generate context: ' + error.message);
   }
 }
 
@@ -282,30 +365,23 @@ Examples by class:
 Return ONLY the name. No titles, no descriptions, no JSON, no formatting - just the name.`;
 
   try {
-    const response = await axios.post(
-      GROQ_API_URL,
-      {
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Generate a character name.' }
-        ],
-        temperature: 0.9,
-        max_tokens: 30
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      }
-    );
+    const response = await makeGroqRequest({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate a character name.' }
+      ],
+      temperature: 0.9,
+      max_tokens: 30
+    }, { timeout: 10000 });
 
-    return response.data.choices[0].message.content.trim().replace(/['"]/g, '');
+    const content = response.data.choices[0].message.content.trim();
+    const validation = validateCharacterNameResponse(content);
+
+    return validation.data;
   } catch (error) {
-    console.error('Groq API error generating name:', error.response?.data || error.message);
-    throw new Error('Failed to generate name: ' + (error.response?.data?.error?.message || error.message));
+    logger.error('Failed to generate character name', { error: error.message });
+    throw new Error('Failed to generate name: ' + error.message);
   }
 }
 
@@ -334,7 +410,7 @@ async function testConnection() {
     );
     return response.status === 200;
   } catch (error) {
-    console.error('Groq API connection test failed:', error.message);
+    logger.error('Groq API connection test failed', { error: error.message });
     return false;
   }
 }

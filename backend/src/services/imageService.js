@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../config/database');
 const { logger } = require('../utils/logger');
+const { CircuitBreaker, retryWithBackoff } = require('../utils/circuitBreaker');
 
 // API key for Pollinations.ai (removes watermark when provided)
 const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY;
@@ -13,6 +14,19 @@ const APP_REFERRER = 'dungeons-and-dragons-rpg';
 
 // Cache directory for images
 const CACHE_DIR = path.resolve(__dirname, '../../storage/images');
+
+// Configuration
+const IMAGE_TIMEOUT = parseInt(process.env.IMAGE_TIMEOUT) || 30000; // 30 seconds (reduced from 90)
+const MAX_RETRIES = 3;
+const RETRY_BASE_DELAY = 1000;
+
+// Circuit breaker for Pollinations API
+const pollinationsCircuitBreaker = new CircuitBreaker({
+  name: 'pollinations-api',
+  failureThreshold: 5,
+  resetTimeout: 30000, // 30 seconds before trying again
+  successThreshold: 2
+});
 
 /**
  * Generate a random hash for image identification
@@ -130,6 +144,7 @@ async function generateImage(prompt, options = {}) {
 
 /**
  * Fetch and cache an image from Pollinations.ai
+ * Uses circuit breaker and retry logic for reliability
  * @param {string} hash - Image hash
  * @returns {Promise<string|null>} Path to cached file or null on error
  */
@@ -146,37 +161,76 @@ async function fetchAndCacheImage(hash) {
     return metadata.cached_path;
   }
 
-  try {
-    logger.info('Fetching image from Pollinations.ai', { hash });
-
-    const headers = {};
-    if (POLLINATIONS_API_KEY) {
-      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
-    }
-
-    const response = await axios.get(metadata.pollinations_url, {
-      timeout: 90000, // 90 seconds timeout
-      headers,
-      responseType: 'arraybuffer'
-    });
-
-    if (response.status === 200 && response.data.byteLength > 0) {
-      // Save to cache
-      const cachedPath = path.join(CACHE_DIR, `${hash}.png`);
-      fs.writeFileSync(cachedPath, response.data);
-
-      // Update database
-      await updateCachedPath(hash, cachedPath);
-
-      logger.info('Image cached successfully', { hash });
-      return cachedPath;
-    }
-
-    return null;
-  } catch (error) {
-    logger.error('Failed to fetch image', { hash, error: error.message });
+  // Check circuit breaker
+  if (!pollinationsCircuitBreaker.canRequest()) {
+    logger.warn('Circuit breaker is open, skipping image fetch', { hash });
     return null;
   }
+
+  try {
+    const cachedPath = await retryWithBackoff(
+      async () => fetchImageFromUrl(metadata.pollinations_url, hash),
+      {
+        maxRetries: MAX_RETRIES,
+        baseDelay: RETRY_BASE_DELAY,
+        shouldRetry: (error) => {
+          // Retry on network errors or 5xx responses
+          return !error.response || error.response.status >= 500;
+        }
+      }
+    );
+
+    // Update circuit breaker on success
+    pollinationsCircuitBreaker.recordSuccess();
+
+    // Update database with cached path
+    if (cachedPath) {
+      await updateCachedPath(hash, cachedPath);
+    }
+
+    return cachedPath;
+  } catch (error) {
+    // Update circuit breaker on failure
+    pollinationsCircuitBreaker.recordFailure();
+
+    logger.error('Failed to fetch image after retries', {
+      hash,
+      error: error.message,
+      circuitState: pollinationsCircuitBreaker.getState().state
+    });
+    return null;
+  }
+}
+
+/**
+ * Fetch image from URL and save to cache
+ * @param {string} url - Image URL
+ * @param {string} hash - Image hash
+ * @returns {Promise<string>} Path to cached file
+ */
+async function fetchImageFromUrl(url, hash) {
+  const headers = {};
+  if (POLLINATIONS_API_KEY) {
+    headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
+  }
+
+  logger.info('Fetching image from Pollinations.ai', { hash });
+
+  const response = await axios.get(url, {
+    timeout: IMAGE_TIMEOUT,
+    headers,
+    responseType: 'arraybuffer'
+  });
+
+  if (response.status === 200 && response.data.byteLength > 0) {
+    const cachedPath = path.join(CACHE_DIR, `${hash}.png`);
+    fs.writeFileSync(cachedPath, response.data);
+
+    logger.info('Image cached successfully', { hash });
+    return cachedPath;
+  }
+
+  throw new Error(`Invalid response: status ${response.status}`);
 }
 
 /**
@@ -333,6 +387,7 @@ async function testConnection() {
 
 /**
  * Regenerate an image with a new seed and new hash
+ * Uses circuit breaker and retry logic for reliability
  * @param {string} oldHash - Old image hash to regenerate
  * @returns {Promise<Object>} Result with success status, new hash, and new URL
  */
@@ -343,9 +398,15 @@ async function regenerateImage(oldHash) {
     return { success: false, error: 'Image not found' };
   }
 
-  try {
-    logger.info('Regenerating image', { oldHash });
+  // Check circuit breaker
+  if (!pollinationsCircuitBreaker.canRequest()) {
+    return {
+      success: false,
+      error: 'Service temporarily unavailable (circuit breaker open)'
+    };
+  }
 
+  try {
     // Generate a new hash for the new image
     const newHash = generateHash();
 
@@ -355,42 +416,48 @@ async function regenerateImage(oldHash) {
     // Build new Pollinations URL with new seed
     const newUrl = buildPollinationsUrl(metadata.prompt, metadata.width, metadata.height, newSeed);
 
-    // Fetch new image
-    const headers = {};
-    if (POLLINATIONS_API_KEY) {
-      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
-    }
+    logger.info('Regenerating image', { oldHash, newHash });
 
-    const response = await axios.get(newUrl, {
-      timeout: 90000,
-      headers,
-      responseType: 'arraybuffer'
+    // Fetch new image with retry logic
+    const cachedPath = await retryWithBackoff(
+      async () => fetchImageFromUrl(newUrl, newHash),
+      {
+        maxRetries: MAX_RETRIES,
+        baseDelay: RETRY_BASE_DELAY,
+        shouldRetry: (error) => {
+          return !error.response || error.response.status >= 500;
+        }
+      }
+    );
+
+    // Record success
+    pollinationsCircuitBreaker.recordSuccess();
+
+    // Store new image metadata in database
+    await storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
+    await updateCachedPath(newHash, cachedPath);
+
+    // Delete old image (file and db record)
+    await deleteImage(oldHash);
+
+    logger.info('Image regenerated successfully', { oldHash, newHash });
+
+    return {
+      success: true,
+      oldHash,
+      newHash,
+      newUrl: `/api/images/${newHash}`
+    };
+  } catch (error) {
+    // Record failure
+    pollinationsCircuitBreaker.recordFailure();
+
+    logger.error('Failed to regenerate image', {
+      oldHash,
+      error: error.message,
+      circuitState: pollinationsCircuitBreaker.getState().state
     });
 
-    if (response.status === 200 && response.data.byteLength > 0) {
-      // Save to cache with new hash
-      const cachedPath = path.join(CACHE_DIR, `${newHash}.png`);
-      fs.writeFileSync(cachedPath, response.data);
-
-      // Store new image metadata in database
-      await storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
-      await updateCachedPath(newHash, cachedPath);
-
-      // Delete old image (file and db record)
-      await deleteImage(oldHash);
-
-      logger.info('Image regenerated successfully', { oldHash, newHash });
-      return {
-        success: true,
-        oldHash,
-        newHash,
-        newUrl: `/api/images/${newHash}`
-      };
-    }
-
-    return { success: false, error: 'Failed to fetch new image' };
-  } catch (error) {
-    logger.error('Failed to regenerate image', { oldHash, error: error.message });
     return { success: false, error: error.message };
   }
 }

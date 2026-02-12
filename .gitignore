@@ -47,3 +47,4 @@ screenshot/
 
 # Backend storage (cached images)
 backend/storage/
+backend/.husky
