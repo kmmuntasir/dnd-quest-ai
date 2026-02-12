@@ -7,11 +7,17 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:api": "node tests/api-test.js",
     "prepare": "husky"
+  },
+  "lint-staged": {
+    "src/**/*.js": [
+      "eslint --fix"
+    ]
   },
   "keywords": [
     "dnd",

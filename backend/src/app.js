@@ -9,7 +9,7 @@ const cors = require('cors');
 
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
-const { logger, httpLogger } = require('./utils/logger');
+const { logger, httpLogger, requestIdMiddleware } = require('./utils/logger');
 const healthService = require('./services/healthService');
 
 const app = express();
@@ -19,6 +19,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json({ limit: '1mb' })); // Add request size limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(requestIdMiddleware); // Add request ID for correlation
 app.use(httpLogger);
 
 // Apply general rate limiting to all API routes

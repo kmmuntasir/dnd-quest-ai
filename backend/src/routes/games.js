@@ -5,6 +5,8 @@ const groqService = require('../services/groqService');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
 const { logger } = require('../utils/logger');
+const { roll3d6, getModifier } = require('../utils/helpers');
+const { CHARACTER } = require('../config/constants');
 const {
   startGameSchema,
   gameIdSchema,
@@ -13,32 +15,14 @@ const {
 } = require('../validations/game.schema');
 
 /**
- * Roll 3d6 for character stats
- * @returns {number} Sum of 3 dice rolls
- */
-function rollStat() {
-  return Math.floor(Math.random() * 6) + 1 +
-         Math.floor(Math.random() * 6) + 1 +
-         Math.floor(Math.random() * 6) + 1;
-}
-
-/**
  * Calculate starting HP based on class
  * @param {string} characterClass - Character class
- * @param {number} constitution - CON stat modifier
+ * @param {number} constitution - CON stat value
  * @returns {number} Starting HP
  */
 function calculateStartingHP(characterClass, constitution) {
-  const conMod = Math.floor((constitution - 10) / 2);
-  const baseHP = {
-    'Fighter': 10,
-    'Wizard': 6,
-    'Rogue': 8,
-    'Cleric': 8,
-    'Ranger': 10
-  };
-
-  return (baseHP[characterClass] || 8) + conMod;
+  const conMod = getModifier(constitution);
+  return (CHARACTER.BASE_HP[characterClass] || CHARACTER.DEFAULT_HP) + conMod;
 }
 
 /**
@@ -58,12 +42,12 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
 
     // Generate character stats
     const stats = {
-      STR: rollStat(),
-      DEX: rollStat(),
-      INT: rollStat(),
-      WIS: rollStat(),
-      CON: rollStat(),
-      CHA: rollStat()
+      STR: roll3d6(),
+      DEX: roll3d6(),
+      INT: roll3d6(),
+      WIS: roll3d6(),
+      CON: roll3d6(),
+      CHA: roll3d6()
     };
 
     // Calculate starting HP
