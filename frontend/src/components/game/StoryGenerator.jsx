@@ -31,28 +31,38 @@ const difficulties = [
   { value: 'hard', label: 'Hard' }
 ];
 
+const lengths = [
+  { value: 'quick', label: 'Quick (3 scenes)', description: 'A short adventure for quick sessions' },
+  { value: 'standard', label: 'Standard (5 scenes)', description: 'A well-paced adventure' },
+  { value: 'extended', label: 'Extended (8 scenes)', description: 'An epic journey' },
+  { value: 'ai', label: 'AI Decides', description: 'Let AI choose the optimal length' }
+];
+
 export function StoryGenerator() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     theme: 'fantasy',
     tone: 'serious',
     difficulty: 'medium',
+    length: 'standard',
     context: ''
   });
   const [loading, setLoading] = useState(false);
   const [generatingContext, setGeneratingContext] = useState(false);
 
-  // Randomize theme, tone, and difficulty
+  // Randomize theme, tone, difficulty, and length
   const handleRandomize = () => {
     const randomTheme = themes[Math.floor(Math.random() * themes.length)].value;
     const randomTone = tones[Math.floor(Math.random() * tones.length)].value;
     const randomDifficulty = difficulties[Math.floor(Math.random() * difficulties.length)].value;
+    const randomLength = lengths[Math.floor(Math.random() * lengths.length)].value;
 
     setFormData(prev => ({
       ...prev,
       theme: randomTheme,
       tone: randomTone,
-      difficulty: randomDifficulty
+      difficulty: randomDifficulty,
+      length: randomLength
     }));
   };
 
@@ -125,7 +135,7 @@ export function StoryGenerator() {
             </Button>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 gap-6">
             {/* Theme Selection */}
             <Select
               label="Theme"
@@ -148,6 +158,14 @@ export function StoryGenerator() {
               options={difficulties}
               value={formData.difficulty}
               onChange={(e) => setFormData({ ...formData, difficulty: e.target.value })}
+            />
+
+            {/* Length Selection */}
+            <Select
+              label="Adventure Length"
+              options={lengths}
+              value={formData.length}
+              onChange={(e) => setFormData({ ...formData, length: e.target.value })}
             />
           </div>
 
@@ -211,9 +229,30 @@ export function StoryGenerator() {
             <Zap className="w-5 h-5 text-accent-purple" />
             AI-Powered Generation
           </h3>
-          <p className="text-gray-400 leading-relaxed">
+          <p className="text-gray-400 leading-relaxed mb-4">
             Our advanced AI will create a complete adventure with multiple scenes, NPCs,
-            and branching choices based on your preferences. Generation typically takes 20-40 seconds.
+            and branching choices based on your preferences.
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent-gold"></span>
+              <span className="text-gray-300"><strong>Quick:</strong> 3 scenes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent-purple"></span>
+              <span className="text-gray-300"><strong>Standard:</strong> 5 scenes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent-red"></span>
+              <span className="text-gray-300"><strong>Extended:</strong> 8 scenes</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400"></span>
+              <span className="text-gray-300"><strong>AI Decides:</strong> 3-10 scenes</span>
+            </div>
+          </div>
+          <p className="text-gray-500 text-xs mt-4">
+            Generation time varies by length: Quick ~15s, Standard ~25s, Extended ~45s
           </p>
         </div>
       </div>

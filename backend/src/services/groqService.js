@@ -5,15 +5,45 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 /**
+ * Get scene count based on length parameter
+ * @param {string} length - Length parameter (quick, standard, extended, ai)
+ * @returns {number|'ai'} Number of scenes or 'ai' for AI-decided
+ */
+function getSceneCount(length) {
+  switch (length) {
+    case 'quick':
+      return 3;
+    case 'standard':
+      return 5;
+    case 'extended':
+      return 8;
+    case 'ai':
+    default:
+      return 'ai';
+  }
+}
+
+/**
  * Generate adventure using Groq API
  * @param {Object} params - Adventure generation parameters
  * @param {string} params.theme - Setting theme (fantasy, horror, sci-fi)
  * @param {string} params.tone - Story tone (serious, humorous, dark)
  * @param {string} params.difficulty - Game difficulty (easy, medium, hard)
+ * @param {string} params.length - Adventure length (quick, standard, extended, ai)
  * @param {string} params.context - Additional context (optional)
  * @returns {Promise<Object>} Generated adventure data
  */
-async function generateAdventure({ theme, tone, difficulty, context }) {
+async function generateAdventure({ theme, tone, difficulty, length = 'standard', context }) {
+  const sceneCount = getSceneCount(length);
+  const isAiDecided = sceneCount === 'ai';
+
+  let sceneInstructions;
+  if (isAiDecided) {
+    sceneInstructions = `IMPORTANT: You decide the optimal number of scenes (between 3-10) based on the story you want to tell. A simple rescue mission might need 3-4 scenes, while an epic quest could need 8-10 scenes. Each scene should advance the story toward the final climax.`;
+  } else {
+    sceneInstructions = `IMPORTANT: You MUST generate exactly ${sceneCount} scenes for a complete adventure. Each scene should advance the story toward the final climax.`;
+  }
+
   const systemPrompt = `You are a Dungeon Master. Generate a D&D adventure with these parameters:
 
 Theme: ${theme}
@@ -21,7 +51,7 @@ Tone: ${tone}
 Difficulty: ${difficulty}
 Additional context: ${context || 'None'}
 
-IMPORTANT: You MUST generate exactly 5 scenes for a complete adventure. Each scene should advance the story toward the final climax.
+${sceneInstructions}
 
 Generate JSON with this exact structure:
 {
@@ -38,39 +68,22 @@ Generate JSON with this exact structure:
   ],
   "scenes": [
     {
-      "description": "Scene 1: Introduction - Set the scene and introduce the quest",
+      "description": "Scene N: Description of what happens in this scene",
       "imagePrompt": "Detailed image generation prompt for Pollinations.ai",
       "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "isKeyScene": true
-    },
-    {
-      "description": "Scene 2: Early challenge or encounter",
-      "imagePrompt": "Detailed image generation prompt for Pollinations.ai",
-      "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "isKeyScene": false
-    },
-    {
-      "description": "Scene 3: Rising action - complications develop",
-      "imagePrompt": "Detailed image generation prompt for Pollinations.ai",
-      "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "isKeyScene": true
-    },
-    {
-      "description": "Scene 4: Approach to the climax",
-      "imagePrompt": "Detailed image generation prompt for Pollinations.ai",
-      "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "isKeyScene": false
-    },
-    {
-      "description": "Scene 5: Final confrontation and resolution",
-      "imagePrompt": "Detailed image generation prompt for Pollinations.ai",
-      "choices": ["Choice 1", "Choice 2", "Choice 3"],
-      "isKeyScene": true
+      "isKeyScene": true/false
     }
   ]
 }
 
-Return ONLY valid JSON. No explanations, no markdown formatting. You MUST include all 5 scenes.`;
+Scene structure guidelines:
+- First scene: Introduction - Set the scene and introduce the quest
+- Middle scenes: Build tension, present challenges, develop the story
+- Final scene: Climax and resolution
+
+Mark key scenes (major plot points, boss encounters, important revelations) with isKeyScene: true.
+
+Return ONLY valid JSON. No explanations, no markdown formatting. ${isAiDecided ? 'Choose the optimal number of scenes for your story.' : `You MUST include exactly ${sceneCount} scenes.`}`;
 
   const userPrompt = 'Generate a D&D adventure based on the parameters above.';
 

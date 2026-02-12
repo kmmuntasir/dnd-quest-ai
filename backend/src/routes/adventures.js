@@ -66,7 +66,7 @@ router.post('/generate-context', async (req, res) => {
  */
 router.post('/generate', async (req, res) => {
   try {
-    const { theme, tone, difficulty, context } = req.body;
+    const { theme, tone, difficulty, length, context } = req.body;
 
     // Validate input
     if (!theme || !tone || !difficulty) {
@@ -83,20 +83,32 @@ router.post('/generate', async (req, res) => {
       });
     }
 
+    // Validate length
+    const validLengths = ['quick', 'standard', 'extended', 'ai'];
+    if (length && !validLengths.includes(length)) {
+      return res.status(400).json({
+        error: 'Invalid length. Must be: quick, standard, extended, or ai'
+      });
+    }
+
     // Generate adventure using Groq
-    console.log('Generating adventure with Groq...');
+    console.log('Generating adventure with Groq...', { theme, tone, difficulty, length });
     const adventure = await groqService.generateAdventure({
       theme,
       tone,
       difficulty,
+      length: length || 'standard',
       context
     });
 
     console.log('Adventure generated. Generating images...');
 
     // Validate that we have enough scenes
-    if (!adventure.scenes || adventure.scenes.length < 3) {
-      console.warn(`Warning: Only ${adventure.scenes?.length || 0} scenes generated. Expected 5.`);
+    const sceneCount = adventure.scenes?.length || 0;
+    if (sceneCount < 2) {
+      console.warn(`Warning: Only ${sceneCount} scenes generated.`);
+    } else {
+      console.log(`Generated ${sceneCount} scenes for adventure.`);
     }
     const scenesWithImages = await imageService.generateSceneImages(
       adventure.scenes,
