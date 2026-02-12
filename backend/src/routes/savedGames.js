@@ -3,14 +3,19 @@ const router = express.Router();
 const db = require('../config/database');
 const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
 const { logger } = require('../utils/logger');
+const { requireAuth } = require('../middleware/auth');
+const { checkOwnership, requireAuthAndFilter, buildUserFilterClause } = require('../middleware/ownership');
 
 /**
  * GET /api/saved-games/adventures
  * List unique adventures that have been played, with game count
+ * Only shows adventures with games owned by the authenticated user
  */
-router.get('/adventures', async (req, res) => {
+router.get('/adventures', requireAuth, async (req, res) => {
   try {
-    // Get unique adventures with their game count and most recent play
+    const userId = req.user.id;
+
+    // Get unique adventures with their game count and most recent play (user's games only)
     const adventures = await db.all(`
       SELECT
         a.id as adventure_id,
@@ -24,9 +29,10 @@ router.get('/adventures', async (req, res) => {
         (SELECT COUNT(*) FROM scenes s WHERE s.adventure_id = a.id) as total_scenes
       FROM adventures a
       JOIN saved_games sg ON sg.adventure_id = a.id
+      WHERE sg.user_id = ?
       GROUP BY a.id
       ORDER BY last_played DESC
-    `);
+    `, [userId]);
 
     res.json({ data: adventures });
   } catch (error) {
@@ -40,11 +46,12 @@ router.get('/adventures', async (req, res) => {
 
 /**
  * GET /api/saved-games/adventures/:adventureId/games
- * Get all game instances for a specific adventure
+ * Get all game instances for a specific adventure (user's games only)
  */
-router.get('/adventures/:adventureId/games', async (req, res) => {
+router.get('/adventures/:adventureId/games', requireAuth, async (req, res) => {
   try {
     const { adventureId } = req.params;
+    const userId = req.user.id;
 
     const games = await db.all(`
       SELECT
@@ -62,9 +69,9 @@ router.get('/adventures/:adventureId/games', async (req, res) => {
         (SELECT s.image_url FROM scenes s WHERE s.id = sg.current_scene_id) as scene_image_url,
         (SELECT COUNT(*) FROM scenes s WHERE s.adventure_id = sg.adventure_id) as total_scenes
       FROM saved_games sg
-      WHERE sg.adventure_id = ?
+      WHERE sg.adventure_id = ? AND sg.user_id = ?
       ORDER BY sg.last_played DESC
-    `, [adventureId]);
+    `, [adventureId, userId]);
 
     // Parse JSON fields and add computed fields
     const gamesWithDetails = games.map(game => {
@@ -96,6 +103,7 @@ router.get('/adventures/:adventureId/games', async (req, res) => {
 /**
  * GET /api/saved-games
  * List all saved games with metadata (paginated)
+ * Only shows games owned by the authenticated user
  * Query params:
  * - page: Page number (default: 1)
  * - limit: Items per page (default: 10, max: 100)
@@ -104,10 +112,11 @@ router.get('/adventures/:adventureId/games', async (req, res) => {
  * - adventureId: Filter by adventure ID (optional)
  * - difficulty: Filter by difficulty (optional)
  */
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const { page, limit, offset } = parsePagination(req.query);
     const { sortBy = 'last_played', sortOrder = 'DESC', adventureId, difficulty } = req.query;
+    const userId = req.user.id;
 
     // Validate sort order
     const validSortOrders = ['ASC', 'DESC'];
@@ -115,9 +124,9 @@ router.get('/', async (req, res) => {
     const order = validSortOrders.includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
     const field = validSortBy.includes(sortBy) ? sortBy : 'last_played';
 
-    // Build query conditions
-    let conditions = [];
-    let params = [];
+    // Build query conditions - always filter by user
+    let conditions = ['sg.user_id = ?'];
+    let params = [userId];
 
     if (adventureId) {
       conditions.push('a.id = ?');
@@ -129,7 +138,7 @@ router.get('/', async (req, res) => {
       params.push(difficulty);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     // Get total count for pagination
     const countQuery = `
@@ -184,21 +193,16 @@ router.get('/', async (req, res) => {
 
 /**
  * DELETE /api/saved-games/:id
- * Delete a saved game
+ * Delete a saved game (only if owned by user)
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, checkOwnership('savedGame'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if game exists
-    const game = await db.get('SELECT id FROM saved_games WHERE id = ?', [id]);
-
-    if (!game) {
-      return res.status(404).json({ error: 'Saved game not found' });
-    }
-
-    // Delete game
+    // Delete game (ownership already verified by middleware)
     await db.run('DELETE FROM saved_games WHERE id = ?', [id]);
+
+    logger.info('Saved game deleted', { gameId: id, userId: req.user.id });
 
     res.json({ success: true, message: 'Saved game deleted successfully' });
   } catch (error) {

@@ -9,16 +9,48 @@ const cors = require('cors');
 
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
+const { sanitizeBody, lenientOptions } = require('./middleware/sanitize');
 const { logger, httpLogger, requestIdMiddleware } = require('./utils/logger');
 const healthService = require('./services/healthService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configure CORS with proper origin whitelist
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    // In development, allow all origins
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    // In production, check against whitelist
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn('CORS blocked request from origin', { origin });
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  exposedHeaders: ['X-Request-ID'],
+  maxAge: 86400 // 24 hours
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' })); // Add request size limit
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(sanitizeBody(lenientOptions)); // Sanitize input to prevent XSS
 app.use(requestIdMiddleware); // Add request ID for correlation
 app.use(httpLogger);
 
@@ -81,12 +113,53 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info('Server started', {
     port: PORT,
     environment: process.env.NODE_ENV,
     nodeVersion: process.version
   });
 });
+
+// Configure server timeouts
+server.setTimeout(30000); // 30 second timeout
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 66000;
+
+// Graceful shutdown handling
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.info(`Received ${signal}, starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  server.close(async () => {
+    logger.info('HTTP server closed');
+
+    // Close database connection
+    try {
+      const db = require('./config/database');
+      await db.close();
+      logger.info('Database connection closed');
+    } catch (error) {
+      logger.error('Error closing database', { error: error.message });
+    }
+
+    logger.info('Graceful shutdown complete');
+    process.exit(0);
+  });
+
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = app;

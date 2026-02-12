@@ -5,6 +5,8 @@ const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { checkOwnership } = require('../middleware/ownership');
 const { logger } = require('../utils/logger');
 const {
   generateCharacterNameSchema,
@@ -59,10 +61,10 @@ router.post('/generate-context', aiLimiter, validate(generateContextSchema), asy
  * POST /api/adventures/generate
  * Generate a new adventure
  */
-router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (req, res) => {
+router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchema), async (req, res) => {
   try {
     const { theme, tone, difficulty, length, context } = req.body;
-    const userId = req.user?.id || null;
+    const userId = req.user.id;
 
     // Generate adventure using Groq
     logger.info('Generating adventure', { theme, tone, difficulty, length });
@@ -100,37 +102,43 @@ router.post('/generate', aiLimiter, validate(generateAdventureSchema), async (re
       })
     );
 
-    // Insert adventure into database
-    const adventureResult = await db.run(`
-      INSERT INTO adventures (title, description, setting, quest, difficulty, user_id, generated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [adventure.title, adventure.description, adventure.setting, adventure.quest, difficulty, userId]);
+    // Insert adventure, scenes, and NPCs in a transaction for data integrity
+    const adventureId = await db.transaction(async (txn) => {
+      // Insert adventure into database
+      const adventureResult = await txn.run(`
+        INSERT INTO adventures (title, description, setting, quest, difficulty, user_id, generated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [adventure.title, adventure.description, adventure.setting, adventure.quest, difficulty, userId]);
 
-    const adventureId = adventureResult.lastID;
+      const newAdventureId = adventureResult.lastID;
 
-    // Insert scenes with image_hash
-    for (const scene of scenesWithImages) {
-      await db.run(`
-        INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [
-        adventureId,
-        scenesWithImages.indexOf(scene),
-        scene.description,
-        scene.image_url,
-        scene.image_hash,
-        JSON.stringify(scene.choices),
-        scene.isKeyScene ? 1 : 0
-      ]);
-    }
+      // Insert scenes with image_hash
+      for (let i = 0; i < scenesWithImages.length; i++) {
+        const scene = scenesWithImages[i];
+        await txn.run(`
+          INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          newAdventureId,
+          i,
+          scene.description,
+          scene.image_url,
+          scene.image_hash,
+          JSON.stringify(scene.choices),
+          scene.isKeyScene ? 1 : 0
+        ]);
+      }
 
-    // Insert NPCs with portrait_hash
-    for (const npc of npcsWithImages) {
-      await db.run(`
-        INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [adventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
-    }
+      // Insert NPCs with portrait_hash
+      for (const npc of npcsWithImages) {
+        await txn.run(`
+          INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [newAdventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
+      }
+
+      return newAdventureId;
+    });
 
     logger.info('Adventure saved', { adventureId });
 
@@ -200,11 +208,22 @@ router.get('/:id', validate(adventureIdSchema, 'params'), async (req, res) => {
 
 /**
  * GET /api/adventures
- * List all adventures
+ * List all adventures (only user's own adventures if authenticated)
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    const adventures = await db.all('SELECT id, title, description, difficulty, generated_at FROM adventures ORDER BY generated_at DESC');
+    let adventures;
+
+    if (req.user) {
+      // Authenticated user - only show their adventures
+      adventures = await db.all(
+        'SELECT id, title, description, difficulty, generated_at FROM adventures WHERE user_id = ? ORDER BY generated_at DESC',
+        [req.user.id]
+      );
+    } else {
+      // No auth - show all adventures (for backward compatibility with public browsing)
+      adventures = await db.all('SELECT id, title, description, difficulty, generated_at FROM adventures ORDER BY generated_at DESC');
+    }
 
     res.json(adventures);
   } catch (error) {
@@ -220,18 +239,12 @@ router.get('/', async (req, res) => {
  * DELETE /api/adventures/:id
  * Delete an adventure and all associated data (scenes, NPCs, saved games, cached images)
  */
-router.delete('/:id', validate(adventureIdSchema, 'params'), async (req, res) => {
+router.delete('/:id', requireAuth, checkOwnership('adventure'), validate(adventureIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if adventure exists
-    const adventure = await db.get('SELECT id FROM adventures WHERE id = ?', [id]);
-
-    if (!adventure) {
-      return res.status(404).json({ error: 'Adventure not found' });
-    }
-
-    logger.info('Deleting adventure', { adventureId: id });
+    // Adventure existence and ownership already verified by middleware
+    logger.info('Deleting adventure', { adventureId: id, userId: req.user.id });
 
     // Delete cached images first (before deleting database records)
     await imageService.deleteAdventureImages(id);

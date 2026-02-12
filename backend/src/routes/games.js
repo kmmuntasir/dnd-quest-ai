@@ -4,6 +4,8 @@ const db = require('../config/database');
 const groqService = require('../services/groqService');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
+const { requireAuth, optionalAuth } = require('../middleware/auth');
+const { checkOwnership } = require('../middleware/ownership');
 const { logger } = require('../utils/logger');
 const { roll3d6, getModifier } = require('../utils/helpers');
 const { CHARACTER } = require('../config/constants');
@@ -29,10 +31,10 @@ function calculateStartingHP(characterClass, constitution) {
  * POST /api/games/start
  * Start a new game
  */
-router.post('/start', validate(startGameSchema), async (req, res) => {
+router.post('/start', requireAuth, validate(startGameSchema), async (req, res) => {
   try {
     const { adventureId, characterName, characterClass } = req.body;
-    const userId = req.user?.id || null;
+    const userId = req.user.id;
 
     // Check if adventure exists
     const adventure = await db.get('SELECT * FROM adventures WHERE id = ?', [adventureId]);
@@ -121,11 +123,11 @@ router.post('/start', validate(startGameSchema), async (req, res) => {
  * GET /api/games/:id
  * Get current game state
  */
-router.get('/:id', validate(gameIdSchema, 'params'), async (req, res) => {
+router.get('/:id', requireAuth, checkOwnership('game'), validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get saved game
+    // Get saved game (ownership already verified by middleware)
     const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
@@ -177,12 +179,12 @@ router.get('/:id', validate(gameIdSchema, 'params'), async (req, res) => {
  * POST /api/games/:id/choice
  * Submit player choice
  */
-router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSchema), aiLimiter, async (req, res) => {
+router.post('/:id/choice', requireAuth, checkOwnership('game'), validate(gameIdSchema, 'params'), validate(choiceSchema), aiLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { choiceIndex, diceRoll } = req.body;
 
-    // Get saved game
+    // Get saved game (ownership already verified by middleware)
     const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
@@ -353,11 +355,11 @@ router.post('/:id/choice', validate(gameIdSchema, 'params'), validate(choiceSche
  * POST /api/games/:id/go-back
  * Go back to previous scene (not available in hard mode)
  */
-router.post('/:id/go-back', validate(gameIdSchema, 'params'), async (req, res) => {
+router.post('/:id/go-back', requireAuth, checkOwnership('game'), validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get saved game
+    // Get saved game (ownership already verified by middleware)
     const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
 
     if (!savedGame) {
@@ -444,7 +446,7 @@ router.post('/:id/go-back', validate(gameIdSchema, 'params'), async (req, res) =
  * POST /api/games/:id/save
  * Manual save
  */
-router.post('/:id/save', validate(gameIdSchema, 'params'), async (req, res) => {
+router.post('/:id/save', requireAuth, checkOwnership('game'), validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -469,11 +471,11 @@ router.post('/:id/save', validate(gameIdSchema, 'params'), async (req, res) => {
  * POST /api/games/:id/restart
  * Restart game with same character (reset to first scene, restore HP)
  */
-router.post('/:id/restart', validate(gameIdSchema, 'params'), async (req, res) => {
+router.post('/:id/restart', requireAuth, checkOwnership('game'), validate(gameIdSchema, 'params'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get current game
+    // Get current game (ownership already verified by middleware)
     const savedGame = await db.get('SELECT * FROM saved_games WHERE id = ?', [id]);
     if (!savedGame) {
       return res.status(404).json({ error: 'Game not found' });

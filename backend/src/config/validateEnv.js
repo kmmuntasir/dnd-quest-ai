@@ -56,10 +56,15 @@ function validateEnv() {
     warnings.push('GROQ_API_KEY appears to be a placeholder value');
   }
 
-  // Check for JWT_SECRET in production
+  // Check for JWT_SECRET in production - FAIL if insecure
   if (process.env.NODE_ENV === 'production') {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('dev-') || process.env.JWT_SECRET.includes('change')) {
-      warnings.push('JWT_SECRET should be set to a secure random value in production');
+    if (!process.env.JWT_SECRET ||
+        process.env.JWT_SECRET.includes('dev-') ||
+        process.env.JWT_SECRET.includes('change') ||
+        process.env.JWT_SECRET.length < 32) {
+      const message = 'JWT_SECRET must be set to a secure random value (minimum 32 characters) in production. Generate with: openssl rand -hex 32';
+      logger.error(message);
+      throw new Error(message);
     }
   }
 
