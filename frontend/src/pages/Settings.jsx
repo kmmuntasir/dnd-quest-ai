@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Palette, Sliders, Volume2, Shield, Check } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Input';
 import { Toast } from '../components/ui/Toast';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const imageStyles = [
   { value: 'fantasy art', label: 'Fantasy Art' },
@@ -36,9 +39,11 @@ export function Settings() {
 
   const loadSettings = async () => {
     try {
-      // TODO: Load from backend API
-      // const response = await axios.get('/api/settings');
-      // setSettings(response.data);
+      const response = await axios.get(`${API_BASE_URL}/settings`);
+      setSettings(prev => ({
+        ...prev,
+        ...response.data
+      }));
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -47,35 +52,30 @@ export function Settings() {
   const saveSettings = async () => {
     try {
       setLoading(true);
-      // TODO: Save to backend API
-      // await axios.put('/api/settings', settings);
-      
+      await axios.put(`${API_BASE_URL}/settings`, settings);
+
       setLoading(false);
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);
       setLoading(false);
+      alert(error.response?.data?.error || 'Failed to save settings. Please try again.');
     }
   };
 
   const testAIConnection = async () => {
     try {
       setTestingAI(true);
-      // TODO: Test API connections
-      // const response = await axios.get('/api/settings/ai/test');
-      // setAiStatus(response.data);
-      
-      // Mock response for now
-      setTimeout(() => {
-        setAiStatus({
-          groq: true,
-          pollinations: true
-        });
-        setTestingAI(false);
-      }, 2000);
+      const response = await axios.get(`${API_BASE_URL}/settings/ai/test`);
+      setAiStatus({
+        groq: response.data.groq || false,
+        pollinations: response.data.pollinations || false
+      });
+      setTestingAI(false);
     } catch (error) {
       console.error('Failed to test AI:', error);
+      setAiStatus({ groq: false, pollinations: false });
       setTestingAI(false);
     }
   };

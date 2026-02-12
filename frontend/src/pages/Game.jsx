@@ -20,6 +20,8 @@ export function Game() {
   const [currentScene, setCurrentScene] = useState(null);
   const [showCharacterCreation, setShowCharacterCreation] = useState(false);
   const [selectedChoice, setSelectedChoice] = useState(null);
+  const [rolling, setRolling] = useState(false);
+  const [narrative, setNarrative] = useState(null);
 
   useEffect(() => {
     loadGame();
@@ -46,6 +48,51 @@ export function Game() {
       console.error('Failed to load game:', error);
       setLoading(false);
       alert(error.response?.data?.error || 'Failed to load game. Please try again.');
+    }
+  };
+
+  const handleDiceRoll = async (diceValue) => {
+    if (selectedChoice === null) {
+      alert('Please select a choice first!');
+      return;
+    }
+
+    try {
+      setRolling(true);
+      const response = await axios.post(`${API_BASE_URL}/games/${gameId}/choice`, {
+        choiceIndex: selectedChoice,
+        diceRoll: diceValue
+      });
+
+      const data = response.data;
+
+      // Update narrative
+      setNarrative(data.narrative);
+
+      // Update character state
+      if (data.character) {
+        setCharacter(prev => ({
+          ...prev,
+          hp: data.character.hp,
+          gold: data.character.gold,
+          inventory: data.character.inventory,
+          stats: data.character.stats || prev.stats
+        }));
+      }
+
+      // Check for game over
+      if (data.gameOver) {
+        alert(data.victory ? 'Congratulations! You won!' : 'Game Over! You have been defeated.');
+        // Could navigate to a game over screen here
+      }
+
+      // Reset for next choice
+      setSelectedChoice(null);
+      setRolling(false);
+    } catch (error) {
+      console.error('Failed to submit choice:', error);
+      setRolling(false);
+      alert(error.response?.data?.error || 'Failed to submit choice. Please try again.');
     }
   };
 
@@ -225,6 +272,22 @@ export function Game() {
               </SlideUp>
             </div>
 
+            {/* Choice Result Narrative */}
+            {narrative && (
+              <div className="mb-6">
+                <SlideUp delay={100}>
+                  <div className="bg-accent-purple/20 p-8 rounded-2xl border border-accent-purple/50">
+                    <h3 className="font-display text-xl font-bold text-accent-gold mb-4">
+                      Result
+                    </h3>
+                    <p className="text-lg text-white leading-relaxed">
+                      {narrative}
+                    </p>
+                  </div>
+                </SlideUp>
+              </div>
+            )}
+
             {/* Scene Number */}
             <div className="text-center mb-4">
               <span className="inline-block bg-background-dark/50 px-4 py-2 rounded-full text-sm text-gray-400">
@@ -260,12 +323,23 @@ export function Game() {
                 <p className="text-sm text-gray-400 text-center mb-4">
                   Select an option above, then roll the d20 to determine your outcome
                 </p>
-                <DiceRoller onRoll={(value) => console.log('Rolled:', value)} disabled={selectedChoice === null} />
+                <DiceRoller onRoll={handleDiceRoll} disabled={selectedChoice === null || rolling} />
               </div>
             </Card>
 
             {/* Save Button */}
-            <button className="w-full px-6 py-3 bg-background-card hover:bg-background-input text-white rounded-lg border border-background-input transition-all flex items-center justify-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  await axios.post(`${API_BASE_URL}/games/${gameId}/save`);
+                  alert('Game saved successfully!');
+                } catch (error) {
+                  console.error('Failed to save game:', error);
+                  alert(error.response?.data?.error || 'Failed to save game. Please try again.');
+                }
+              }}
+              className="w-full px-6 py-3 bg-background-card hover:bg-background-input text-white rounded-lg border border-background-input transition-all flex items-center justify-center gap-2"
+            >
               <Backpack className="w-5 h-5 text-gray-400" />
               Save Game
             </button>

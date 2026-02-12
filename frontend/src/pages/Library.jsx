@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 import { BookOpen, Trash2, Play, Clock } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { StoryGenerator } from '../components/game/StoryGenerator';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export function Library() {
   const location = useLocation();
@@ -26,27 +29,21 @@ export function Library() {
   const loadSavedGames = async () => {
     try {
       setLoading(true);
-      // TODO: Call backend API
-      // const response = await axios.get('/api/saved-games');
-      // setSavedGames(response.data.data);
-      
-      // For now, mock data
-      setTimeout(() => {
-        setSavedGames([
-          {
-            id: 1,
-            character_name: 'Aragorn',
-            character_class: 'Fighter',
-            hp: 13,
-            gold: 25,
-            adventure_title: 'The Haunted Forest',
-            difficulty: 'medium',
-            total_scenes: 8,
-            last_played: new Date().toISOString()
-          }
-        ]);
-        setLoading(false);
-      }, 1000);
+      const response = await axios.get(`${API_BASE_URL}/saved-games`);
+      // API returns { data: [...], pagination: {...} }
+      const games = response.data.data.map(game => ({
+        id: game.id,
+        character_name: game.character_name,
+        character_class: game.character_class,
+        hp: JSON.parse(game.stats || '{}').hp || game.hp || 10,
+        gold: game.gold || 0,
+        adventure_title: game.adventure_title || 'Unknown Adventure',
+        difficulty: game.difficulty || 'medium',
+        total_scenes: game.total_scenes || 1,
+        last_played: game.last_played
+      }));
+      setSavedGames(games);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to load saved games:', error);
       setLoading(false);
@@ -55,13 +52,13 @@ export function Library() {
 
   const handleDelete = async (gameId) => {
     if (!window.confirm('Are you sure you want to delete this saved game?')) return;
-    
+
     try {
-      // TODO: Call backend API
-      // await axios.delete(`/api/saved-games/${gameId}`);
+      await axios.delete(`${API_BASE_URL}/saved-games/${gameId}`);
       setSavedGames(savedGames.filter(g => g.id !== gameId));
     } catch (error) {
       console.error('Failed to delete game:', error);
+      alert(error.response?.data?.error || 'Failed to delete game. Please try again.');
     }
   };
 
