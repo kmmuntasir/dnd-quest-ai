@@ -13,7 +13,9 @@ function validate(schema, source = 'body') {
     const result = schema.safeParse(data);
 
     if (!result.success) {
-      const errors = result.error.errors.map(err => ({
+      // Zod v4 uses .issues, fallback to .errors for older versions
+      const issues = result.error.issues || result.error.errors || [];
+      const errors = issues.map(err => ({
         field: err.path.join('.'),
         message: err.message
       }));
@@ -48,7 +50,9 @@ function validateAll(schemas) {
       if (schema) {
         const result = schema.safeParse(req[source]);
         if (!result.success) {
-          errors.push(...result.error.errors.map(err => ({
+          // Zod v4 uses .issues, fallback to .errors for older versions
+          const issues = result.error.issues || result.error.errors || [];
+          errors.push(...issues.map(err => ({
             source,
             field: err.path.join('.'),
             message: err.message

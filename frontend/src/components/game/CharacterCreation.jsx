@@ -127,7 +127,7 @@ export function CharacterCreation() {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/games/start`, {
-        adventureId,
+        adventureId: parseInt(adventureId, 10),
         characterName: formData.name,
         characterClass: formData.class
       });
