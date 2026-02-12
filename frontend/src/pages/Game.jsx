@@ -9,11 +9,13 @@ import { CharacterCreation } from '../components/game/CharacterCreation';
 import { DiceRoller } from '../components/game/DiceRoller';
 import { ChoicesList } from '../components/game/Choices';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
+import { useToast } from '../components/ui/ToastContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export function Game() {
   const { gameId } = useParams();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState(null);
   const [character, setCharacter] = useState(null);
@@ -60,7 +62,7 @@ export function Game() {
     } catch (error) {
       console.error('Failed to load game:', error);
       setLoading(false);
-      alert(error.response?.data?.error || 'Failed to load game. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to load game. Please try again.');
     }
   };
 
@@ -95,7 +97,7 @@ export function Game() {
     } catch (error) {
       console.error('Failed to go back:', error);
       setGoingBack(false);
-      alert(error.response?.data?.error || 'Failed to go back. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to go back. Please try again.');
     }
   };
 
@@ -119,7 +121,7 @@ export function Game() {
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
-      alert(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
     } finally {
       setRegenerating(false);
     }
@@ -127,7 +129,7 @@ export function Game() {
 
   const handleDiceRoll = async (diceValue) => {
     if (selectedChoice === null) {
-      alert('Please select a choice first!');
+      toast.warning('Please select a choice first!');
       return;
     }
 
@@ -186,7 +188,7 @@ export function Game() {
     } catch (error) {
       console.error('Failed to submit choice:', error);
       setRolling(false);
-      alert(error.response?.data?.error || 'Failed to submit choice. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to submit choice. Please try again.');
     }
   };
 
@@ -457,10 +459,10 @@ export function Game() {
               onClick={async () => {
                 try {
                   await axios.post(`${API_BASE_URL}/games/${gameId}/save`);
-                  alert('Game saved successfully!');
+                  toast.success('Game saved successfully!');
                 } catch (error) {
                   console.error('Failed to save game:', error);
-                  alert(error.response?.data?.error || 'Failed to save game. Please try again.');
+                  toast.error(error.response?.data?.error || 'Failed to save game. Please try again.');
                 }
               }}
               className="w-full px-6 py-3 bg-background-card hover:bg-background-input text-white rounded-lg border border-background-input transition-all flex items-center justify-center gap-2"

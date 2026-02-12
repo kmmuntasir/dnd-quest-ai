@@ -8,6 +8,8 @@ import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { StoryGenerator } from '../components/game/StoryGenerator';
 import { Image } from '../components/ui/Image';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
+import { useToast } from '../components/ui/ToastContext';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -29,8 +31,10 @@ const difficultyColors = {
 
 // Play History Modal Component
 function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGallery, onDeleteAdventure }) {
+  const toast = useToast();
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [confirmState, setConfirmState] = useState({ isOpen: false, type: null, id: null });
 
   useEffect(() => {
     loadGames();
@@ -49,30 +53,46 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
   };
 
   const handleDeleteGame = async (gameId) => {
-    if (!window.confirm('Are you sure you want to delete this playthrough?')) return;
-
-    try {
-      await axios.delete(`${API_BASE_URL}/saved-games/${gameId}`);
-      setGames(games.filter(g => g.id !== gameId));
-      if (games.length === 1) {
-        onClose();
-      }
-    } catch (error) {
-      console.error('Failed to delete game:', error);
-      alert(error.response?.data?.error || 'Failed to delete game.');
-    }
+    setConfirmState({
+      isOpen: true,
+      type: 'game',
+      id: gameId,
+      title: 'Delete Playthrough?',
+      message: 'Are you sure you want to delete this playthrough? This cannot be undone.'
+    });
   };
 
   const handleDeleteAdventure = async () => {
-    if (!window.confirm('Are you sure you want to delete this entire adventure? This will delete all playthroughs and cannot be undone.')) return;
+    setConfirmState({
+      isOpen: true,
+      type: 'adventure',
+      id: adventure.adventure_id,
+      title: 'Delete Adventure?',
+      message: 'Are you sure you want to delete this entire adventure? This will delete all playthroughs and cannot be undone.'
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { type, id } = confirmState;
+    setConfirmState({ isOpen: false, type: null, id: null });
 
     try {
-      await axios.delete(`${API_BASE_URL}/adventures/${adventure.adventure_id}`);
-      onDeleteAdventure(adventure.adventure_id);
-      onClose();
+      if (type === 'game') {
+        await axios.delete(`${API_BASE_URL}/saved-games/${id}`);
+        setGames(games.filter(g => g.id !== id));
+        toast.success('Playthrough deleted');
+        if (games.length === 1) {
+          onClose();
+        }
+      } else if (type === 'adventure') {
+        await axios.delete(`${API_BASE_URL}/adventures/${id}`);
+        toast.success('Adventure deleted');
+        onDeleteAdventure(id);
+        onClose();
+      }
     } catch (error) {
-      console.error('Failed to delete adventure:', error);
-      alert(error.response?.data?.error || 'Failed to delete adventure.');
+      console.error(`Failed to delete ${type}:`, error);
+      toast.error(error.response?.data?.error || `Failed to delete ${type}.`);
     }
   };
 
@@ -240,6 +260,17 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
           </div>
         </div>
       </FadeIn>
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmText="Delete"
+        confirmVariant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmState({ isOpen: false, type: null, id: null })}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Settings } from './pages/Settings';
 import { Gallery } from './pages/Gallery';
 import { Layout } from './components/common/Layout';
 import { NotFound } from './components/common/NotFound';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { CharacterCreation } from './components/game/CharacterCreation';
 
 const router = createBrowserRouter([
@@ -13,12 +14,12 @@ const router = createBrowserRouter([
     path: '/',
     element: <Layout />,
     children: [
-      { index: true, element: <Home /> },
-      { path: 'library', element: <Library /> },
-      { path: 'create-character/:adventureId', element: <CharacterCreation /> },
-      { path: 'game/:gameId', element: <Game /> },
-      { path: 'settings', element: <Settings /> },
-      { path: 'gallery/:adventureId', element: <Gallery /> }
+      { index: true, element: <ErrorBoundary><Home /></ErrorBoundary> },
+      { path: 'library', element: <ErrorBoundary><Library /></ErrorBoundary> },
+      { path: 'create-character/:adventureId', element: <ErrorBoundary><CharacterCreation /></ErrorBoundary> },
+      { path: 'game/:gameId', element: <ErrorBoundary><Game /></ErrorBoundary> },
+      { path: 'settings', element: <ErrorBoundary><Settings /></ErrorBoundary> },
+      { path: 'gallery/:adventureId', element: <ErrorBoundary><Gallery /></ErrorBoundary> }
     ]
   },
   {
@@ -28,7 +29,11 @@ const router = createBrowserRouter([
 ]);
 
 export function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <ErrorBoundary>
+      <RouterProvider router={router} />
+    </ErrorBoundary>
+  );
 }
 
 export default App;
