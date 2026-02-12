@@ -363,7 +363,7 @@ export function Library() {
                     onClick={() => setSelectedAdventure(adventure)}
                   >
                     {/* Cover Image */}
-                    <div className="relative h-48 overflow-hidden">
+                    <div className="relative aspect-square overflow-hidden">
                       <Image
                         src={adventure.cover_image_url}
                         alt={adventure.title}
