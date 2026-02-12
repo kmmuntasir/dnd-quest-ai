@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { Sparkles, ArrowRight, Zap } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody } from '../ui/Card';
 import { Input, Textarea, Select } from '../ui/Input';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const themes = [
   { value: 'fantasy', label: 'Fantasy' },
@@ -41,21 +44,20 @@ export function StoryGenerator() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
-      // TODO: Call backend API to generate adventure
-      // const response = await axios.post('/api/adventures/generate', formData);
-      // Navigate to the generated adventure
-      
-      // For now, just simulate and navigate to library
-      setTimeout(() => {
-        navigate('/library', { replace: true });
-        setLoading(false);
-      }, 2000);
+      console.log('Generating adventure with params:', formData);
+      const response = await axios.post(`${API_BASE_URL}/adventures/generate`, formData);
+      console.log('Adventure generated:', response.data);
+
+      // Navigate to the game with the new adventure ID
+      navigate(`/game/${response.data.adventureId}`, { replace: true });
     } catch (error) {
       console.error('Failed to generate adventure:', error);
+      // TODO: Show error toast to user
+      alert(error.response?.data?.error || 'Failed to generate adventure. Please try again.');
+    } finally {
       setLoading(false);
-      // TODO: Show error toast
     }
   };
 
