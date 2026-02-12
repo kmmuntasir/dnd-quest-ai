@@ -1,7 +1,31 @@
-/* Tailwind CSS v4 - Single import replaces all @tailwind directives */
+/* Tailwind CSS v4 - Theme Configuration */
 @import "tailwindcss";
 
-/* Google Fonts - Must come after Tailwind import */
+@theme {
+  /* Custom Colors - Dark Theme Palette */
+  --color-background-dark: #0a0a0f;
+  --color-background-darker: #050508;
+  --color-background-card: #12121a;
+  --color-background-input: #1a1a24;
+
+  /* Primary Colors */
+  --color-primary-default: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-light: #818cf8;
+
+  /* Accent Colors */
+  --color-accent-gold: #fbbf24;
+  --color-accent-purple: #a855f7;
+  --color-accent-red: #ef4444;
+  --color-accent-green: #22c55e;
+
+  /* Custom Font Families */
+  --font-display: 'Cinzel', serif;
+  --font-body: 'Inter', sans-serif;
+  --font-fantasy: 'MedievalSharp', cursive;
+}
+
+/* Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&family=MedievalSharp&display=swap');
 
 :root {
