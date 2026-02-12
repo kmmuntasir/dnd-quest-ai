@@ -11,7 +11,7 @@ export function Button({
   className = '',
   ...props
 }) {
-  const baseStyles = 'font-medium rounded-lg transition-all transform active:scale-95';
+  const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all transform active:scale-95';
   
   const variantStyles = {
     primary: 'bg-primary-default hover:bg-primary-hover text-white',
