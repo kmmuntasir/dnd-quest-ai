@@ -19,7 +19,6 @@ export function Gallery() {
   const [selectedScene, setSelectedScene] = useState(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [imageVersion, setImageVersion] = useState(0); // Used to force image refresh
 
   useEffect(() => {
     loadAdventure();
@@ -66,8 +65,23 @@ export function Gallery() {
       const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${selectedScene.image_hash}/regenerate`);
 
       if (response.data.success) {
-        // Force image refresh by updating version
-        setImageVersion(prev => prev + 1);
+        // Update the scene with the new hash and URL
+        const newHash = response.data.newHash;
+        const newUrl = response.data.newUrl;
+
+        // Update selected scene
+        setSelectedScene(prev => ({
+          ...prev,
+          image_hash: newHash,
+          image_url: newUrl
+        }));
+
+        // Update scenes array
+        setScenes(prev => prev.map(scene =>
+          scene.id === selectedScene.id
+            ? { ...scene, image_hash: newHash, image_url: newUrl }
+            : scene
+        ));
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
@@ -185,7 +199,7 @@ export function Gallery() {
                   {/* Image Container */}
                   <div className="relative flex-shrink-0 lg:max-w-[60%] flex items-center justify-center">
                     <img
-                      src={`${resolveImageUrl(selectedScene.image_url)}${imageVersion > 0 ? `?v=${imageVersion}` : ''}`}
+                      src={resolveImageUrl(selectedScene.image_url)}
                       alt={`Scene ${scenes.findIndex(s => s.id === selectedScene.id) + 1}`}
                       className="max-w-full max-h-[55vh] lg:max-h-[65vh] object-contain rounded-lg"
                     />

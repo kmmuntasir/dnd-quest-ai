@@ -10,6 +10,7 @@ const PLACEHOLDER_IMAGE = path.resolve(__dirname, '../../storage/placeholder.png
 /**
  * POST /api/images/:hash/regenerate
  * Regenerate an image with a new seed
+ * Updates the scene record with the new image hash
  */
 router.post('/:hash/regenerate', async (req, res) => {
   const { hash } = req.params;
@@ -20,13 +21,25 @@ router.post('/:hash/regenerate', async (req, res) => {
       return res.status(400).json({ error: 'Cannot regenerate fallback image' });
     }
 
+    // Find the scene using this image hash
+    const scene = imageService.findSceneByImageHash(hash);
+
+    // Regenerate the image
     const result = await imageService.regenerateImage(hash);
 
     if (result.success) {
+      // Update the scene with the new hash if scene was found
+      if (scene) {
+        imageService.updateSceneImageHash(scene.id, result.newHash);
+      }
+
       return res.json({
         success: true,
         message: 'Image regenerated successfully',
-        hash
+        oldHash: result.oldHash,
+        newHash: result.newHash,
+        newUrl: result.newUrl,
+        sceneId: scene?.id
       });
     } else {
       return res.status(500).json({

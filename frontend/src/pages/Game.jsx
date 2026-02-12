@@ -29,7 +29,6 @@ export function Game() {
   const [goingBack, setGoingBack] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [imageVersion, setImageVersion] = useState(0);
 
   useEffect(() => {
     loadGame();
@@ -108,8 +107,15 @@ export function Game() {
       const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${currentScene.image_hash}/regenerate`);
 
       if (response.data.success) {
-        // Force image refresh by updating version
-        setImageVersion(prev => prev + 1);
+        // Update the current scene with the new hash and URL
+        const newHash = response.data.newHash;
+        const newUrl = response.data.newUrl;
+
+        setCurrentScene(prev => ({
+          ...prev,
+          image_hash: newHash,
+          image_url: newUrl
+        }));
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
@@ -348,7 +354,7 @@ export function Game() {
               <FadeIn delay={100}>
                 <div className="relative aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
                   <Image
-                    src={`${currentScene.image_url}${imageVersion > 0 ? `?v=${imageVersion}` : ''}`}
+                    src={currentScene.image_url}
                     alt={currentScene.description}
                   />
                   {/* Regenerate button */}

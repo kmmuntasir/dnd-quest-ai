@@ -329,41 +329,28 @@ async function testConnection() {
 }
 
 /**
- * Regenerate an image with a new seed
- * @param {string} hash - Image hash to regenerate
- * @returns {Promise<Object>} Result with success status and new cached path
+ * Regenerate an image with a new seed and new hash
+ * @param {string} oldHash - Old image hash to regenerate
+ * @returns {Promise<Object>} Result with success status, new hash, and new URL
  */
-async function regenerateImage(hash) {
-  const metadata = getImageMetadata(hash);
+async function regenerateImage(oldHash) {
+  const metadata = getImageMetadata(oldHash);
 
   if (!metadata) {
     return { success: false, error: 'Image not found' };
   }
 
   try {
-    console.log('Regenerating image:', hash);
+    console.log('Regenerating image:', oldHash);
+
+    // Generate a new hash for the new image
+    const newHash = generateHash();
 
     // Generate a new seed using timestamp for randomness
     const newSeed = Date.now() % 1000000;
 
     // Build new Pollinations URL with new seed
     const newUrl = buildPollinationsUrl(metadata.prompt, metadata.width, metadata.height, newSeed);
-
-    // Update the URL in the database
-    db.prepare(`
-      UPDATE images SET pollinations_url = ? WHERE hash = ?
-    `).run(newUrl, hash);
-
-    // Delete old cached file if exists
-    if (metadata.cached_path && fs.existsSync(metadata.cached_path)) {
-      fs.unlinkSync(metadata.cached_path);
-      console.log('Deleted old cached image:', metadata.cached_path);
-    }
-
-    // Clear cached path in database
-    db.prepare(`
-      UPDATE images SET cached_path = NULL WHERE hash = ?
-    `).run(hash);
 
     // Fetch new image
     const headers = {};
@@ -378,15 +365,24 @@ async function regenerateImage(hash) {
     });
 
     if (response.status === 200 && response.data.byteLength > 0) {
-      // Save to cache
-      const cachedPath = path.join(CACHE_DIR, `${hash}.png`);
+      // Save to cache with new hash
+      const cachedPath = path.join(CACHE_DIR, `${newHash}.png`);
       fs.writeFileSync(cachedPath, response.data);
 
-      // Update database
-      updateCachedPath(hash, cachedPath);
+      // Store new image metadata in database
+      storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
+      updateCachedPath(newHash, cachedPath);
 
-      console.log('Image regenerated successfully:', hash);
-      return { success: true, cachedPath };
+      // Delete old image (file and db record)
+      deleteImage(oldHash);
+
+      console.log('Image regenerated successfully:', oldHash, '->', newHash);
+      return {
+        success: true,
+        oldHash,
+        newHash,
+        newUrl: `/api/images/${newHash}`
+      };
     }
 
     return { success: false, error: 'Failed to fetch new image' };
@@ -394,6 +390,34 @@ async function regenerateImage(hash) {
     console.error('Failed to regenerate image:', error.message);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Update scene's image hash in database
+ * @param {number} sceneId - Scene ID
+ * @param {string} newHash - New image hash
+ * @returns {boolean} True if updated successfully
+ */
+function updateSceneImageHash(sceneId, newHash) {
+  try {
+    db.prepare(`
+      UPDATE scenes SET image_hash = ?, image_url = ? WHERE id = ?
+    `).run(newHash, `/api/images/${newHash}`, sceneId);
+    console.log('Updated scene image hash:', sceneId, '->', newHash);
+    return true;
+  } catch (error) {
+    console.error('Failed to update scene image hash:', error.message);
+    return false;
+  }
+}
+
+/**
+ * Find scene by image hash
+ * @param {string} hash - Image hash
+ * @returns {Object|null} Scene object or null
+ */
+function findSceneByImageHash(hash) {
+  return db.prepare('SELECT * FROM scenes WHERE image_hash = ?').get(hash);
 }
 
 module.exports = {
@@ -406,5 +430,7 @@ module.exports = {
   deleteImage,
   deleteAdventureImages,
   testConnection,
-  regenerateImage
+  regenerateImage,
+  updateSceneImageHash,
+  findSceneByImageHash
 };
