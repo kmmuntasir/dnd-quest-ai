@@ -92,15 +92,12 @@ export function StoryGenerator() {
     setLoading(true);
 
     try {
-      console.log('Generating adventure with params:', formData);
       const response = await axios.post(`${API_BASE_URL}/adventures/generate`, formData);
-      console.log('Adventure generated:', response.data);
 
       // Navigate to character creation with the new adventure ID
       navigate(`/create-character/${response.data.adventureId}`, { replace: true });
     } catch (error) {
       console.error('Failed to generate adventure:', error);
-      // TODO: Show error toast to user
       alert(error.response?.data?.error || 'Failed to generate adventure. Please try again.');
     } finally {
       setLoading(false);

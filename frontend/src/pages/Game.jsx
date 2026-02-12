@@ -140,9 +140,6 @@ export function Game() {
 
       const data = response.data;
 
-      console.log('Choice response:', data);
-      console.log('Next scene:', data.nextScene);
-
       // Update narrative
       setNarrative(data.narrative);
 
