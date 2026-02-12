@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import { User, Shield, Wand, Eye, Heart, Swords } from 'lucide-react';
+import { User, Shield, Wand, Eye, Heart, Swords, Wand2, RefreshCw, Dices } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardFooter } from '../ui/Card';
 import { LoadingSpinner, LoadingPage } from '../ui/LoadingSpinner';
@@ -46,6 +46,23 @@ const classes = [
   }
 ];
 
+// Roll 3d6 for a stat
+const rollStat = () => {
+  return Math.floor(Math.random() * 6) + 1 +
+         Math.floor(Math.random() * 6) + 1 +
+         Math.floor(Math.random() * 6) + 1;
+};
+
+// Generate random initial stats
+const generateRandomStats = () => ({
+  STR: rollStat(),
+  DEX: rollStat(),
+  INT: rollStat(),
+  WIS: rollStat(),
+  CON: rollStat(),
+  CHA: rollStat()
+});
+
 export function CharacterCreation() {
   const navigate = useNavigate();
   const { adventureId } = useParams();
@@ -53,14 +70,8 @@ export function CharacterCreation() {
     name: '',
     class: 'Fighter'
   });
-  const [stats, setStats] = useState({
-    STR: 10,
-    DEX: 10,
-    INT: 10,
-    WIS: 10,
-    CON: 10,
-    CHA: 10
-  });
+  const [stats, setStats] = useState(generateRandomStats);
+  const [generatingName, setGeneratingName] = useState(false);
 
   // Roll 3d6 for a stat
   const rollStat = () => {
@@ -78,6 +89,25 @@ export function CharacterCreation() {
       CON: rollStat(),
       CHA: rollStat()
     });
+  };
+
+  // Generate AI character name
+  const handleGenerateName = async () => {
+    setGeneratingName(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/adventures/generate-character-name`, {
+        characterClass: formData.class
+      });
+      setFormData(prev => ({
+        ...prev,
+        name: response.data.name
+      }));
+    } catch (error) {
+      console.error('Failed to generate name:', error);
+      alert(error.response?.data?.error || 'Failed to generate name. Please try again.');
+    } finally {
+      setGeneratingName(false);
+    }
   };
 
   // Calculate HP based on class and CON
@@ -136,9 +166,31 @@ export function CharacterCreation() {
         <form onSubmit={handleCreateCharacter}>
           {/* Character Name */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Character Name
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-300">
+                Character Name
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleGenerateName}
+                disabled={generatingName}
+                className="gap-2 text-accent-purple hover:text-accent-purple/80"
+              >
+                {generatingName ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-4 h-4" />
+                    AI Generate
+                  </>
+                )}
+              </Button>
+            </div>
             <input
               type="text"
               value={formData.name}
@@ -147,6 +199,9 @@ export function CharacterCreation() {
               className="w-full px-4 py-3 bg-background-input text-white rounded-lg border border-background-input focus:border-primary-default focus:ring-2 focus:ring-primary-default/20 focus:outline-none transition-all"
               required
             />
+            <p className="text-xs text-gray-500 mt-2">
+              Click "AI Generate" to get a name suggestion based on your chosen class.
+            </p>
           </div>
 
           {/* Stats Display */}

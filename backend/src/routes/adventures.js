@@ -5,6 +5,62 @@ const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
 
 /**
+ * POST /api/adventures/generate-character-name
+ * Generate AI character name
+ */
+router.post('/generate-character-name', async (req, res) => {
+  try {
+    const { characterClass } = req.body;
+
+    // Validate input
+    if (!characterClass) {
+      return res.status(400).json({
+        error: 'Missing required field: characterClass'
+      });
+    }
+
+    console.log('Generating character name for class:', characterClass);
+    const name = await groqService.generateCharacterName({ characterClass });
+
+    res.json({ name });
+  } catch (error) {
+    console.error('Error generating character name:', error);
+    res.status(500).json({
+      error: 'Failed to generate character name',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/adventures/generate-context
+ * Generate AI context suggestion for story
+ */
+router.post('/generate-context', async (req, res) => {
+  try {
+    const { theme, tone, difficulty } = req.body;
+
+    // Validate input
+    if (!theme || !tone || !difficulty) {
+      return res.status(400).json({
+        error: 'Missing required fields: theme, tone, difficulty'
+      });
+    }
+
+    console.log('Generating story context...');
+    const context = await groqService.generateContext({ theme, tone, difficulty });
+
+    res.json({ context });
+  } catch (error) {
+    console.error('Error generating context:', error);
+    res.status(500).json({
+      error: 'Failed to generate context',
+      details: error.message
+    });
+  }
+});
+
+/**
  * POST /api/adventures/generate
  * Generate a new adventure
  */
@@ -38,7 +94,10 @@ router.post('/generate', async (req, res) => {
 
     console.log('Adventure generated. Generating images...');
 
-    // Generate images for scenes
+    // Validate that we have enough scenes
+    if (!adventure.scenes || adventure.scenes.length < 3) {
+      console.warn(`Warning: Only ${adventure.scenes?.length || 0} scenes generated. Expected 5.`);
+    }
     const scenesWithImages = await imageService.generateSceneImages(
       adventure.scenes,
       'fantasy art'

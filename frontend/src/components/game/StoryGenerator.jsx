@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Sparkles, ArrowRight, Zap } from 'lucide-react';
+import { Sparkles, ArrowRight, Zap, Dices, Wand2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody } from '../ui/Card';
 import { Input, Textarea, Select } from '../ui/Input';
@@ -40,6 +40,42 @@ export function StoryGenerator() {
     context: ''
   });
   const [loading, setLoading] = useState(false);
+  const [generatingContext, setGeneratingContext] = useState(false);
+
+  // Randomize theme, tone, and difficulty
+  const handleRandomize = () => {
+    const randomTheme = themes[Math.floor(Math.random() * themes.length)].value;
+    const randomTone = tones[Math.floor(Math.random() * tones.length)].value;
+    const randomDifficulty = difficulties[Math.floor(Math.random() * difficulties.length)].value;
+
+    setFormData(prev => ({
+      ...prev,
+      theme: randomTheme,
+      tone: randomTone,
+      difficulty: randomDifficulty
+    }));
+  };
+
+  // Generate AI context suggestion
+  const handleGenerateContext = async () => {
+    setGeneratingContext(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/adventures/generate-context`, {
+        theme: formData.theme,
+        tone: formData.tone,
+        difficulty: formData.difficulty
+      });
+      setFormData(prev => ({
+        ...prev,
+        context: response.data.context
+      }));
+    } catch (error) {
+      console.error('Failed to generate context:', error);
+      alert(error.response?.data?.error || 'Failed to generate context. Please try again.');
+    } finally {
+      setGeneratingContext(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -76,6 +112,19 @@ export function StoryGenerator() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Randomize Button */}
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRandomize}
+              className="gap-2"
+            >
+              <Dices className="w-4 h-4" />
+              Randomize All
+            </Button>
+          </div>
+
           <div className="grid md:grid-cols-3 gap-6">
             {/* Theme Selection */}
             <Select
@@ -103,13 +152,42 @@ export function StoryGenerator() {
           </div>
 
           {/* Additional Context */}
-          <Textarea
-            label="Additional Context (Optional)"
-            placeholder="Describe any specific elements you want in your adventure... (e.g., 'A haunted tavern where ghosts only appear at midnight')"
-            value={formData.context}
-            onChange={(e) => setFormData({ ...formData, context: e.target.value })}
-            rows={4}
-          />
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-300">
+                Additional Context (Optional)
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleGenerateContext}
+                disabled={generatingContext}
+                className="gap-2 text-accent-purple hover:text-accent-purple/80"
+              >
+                {generatingContext ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-4 h-4" />
+                    AI Generate
+                  </>
+                )}
+              </Button>
+            </div>
+            <Textarea
+              placeholder="Describe any specific elements you want in your adventure... (e.g., 'A haunted tavern where ghosts only appear at midnight')"
+              value={formData.context}
+              onChange={(e) => setFormData({ ...formData, context: e.target.value })}
+              rows={4}
+            />
+            <p className="text-xs text-gray-500">
+              Click "AI Generate" to let the AI create a story hook based on your theme, tone, and difficulty settings.
+            </p>
+          </div>
 
           {/* Generate Button */}
           <div className="flex justify-center pt-4">

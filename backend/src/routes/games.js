@@ -285,13 +285,23 @@ router.post('/:id/choice', async (req, res) => {
       updatedInventory.push(response.newItem);
     }
 
-    // Update game history
+    // Store previous state for "go back" feature (save current state before progressing)
+    const previousState = {
+      scene_id: savedGame.current_scene_id,
+      hp: savedGame.hp,
+      gold: savedGame.gold,
+      inventory: JSON.parse(savedGame.inventory),
+      stats: JSON.parse(savedGame.stats)
+    };
+
+    // Update game history with previous state
     const gameHistory = JSON.parse(savedGame.game_history);
     gameHistory.push({
       choice: playerChoice,
       roll: diceRoll,
       outcome: response.outcome,
-      stats: updatedStats
+      stats: updatedStats,
+      previousState: previousState
     });
 
     // Get next scene (by scene_order)
@@ -373,6 +383,97 @@ router.post('/:id/choice', async (req, res) => {
 });
 
 /**
+ * POST /api/games/:id/go-back
+ * Go back to previous scene (not available in hard mode)
+ */
+router.post('/:id/go-back', (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get saved game
+    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+
+    if (!savedGame) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Get adventure to check difficulty
+    const adventure = db.prepare('SELECT difficulty FROM adventures WHERE id = ?').get(savedGame.adventure_id);
+
+    if (!adventure) {
+      return res.status(404).json({ error: 'Adventure not found' });
+    }
+
+    // Check if hard mode - no going back!
+    if (adventure.difficulty === 'hard') {
+      return res.status(400).json({ error: 'Cannot go back in Hard mode. Your choices are permanent!' });
+    }
+
+    // Get game history
+    const gameHistory = JSON.parse(savedGame.game_history);
+
+    // Need at least one choice to go back
+    if (gameHistory.length === 0) {
+      return res.status(400).json({ error: 'No previous scene to go back to' });
+    }
+
+    // Get the last history entry which contains the previous state
+    const lastEntry = gameHistory[gameHistory.length - 1];
+
+    if (!lastEntry.previousState) {
+      return res.status(400).json({ error: 'No previous state saved' });
+    }
+
+    const previousState = lastEntry.previousState;
+
+    // Remove the last entry from history
+    gameHistory.pop();
+
+    // Restore previous state
+    db.prepare(`
+      UPDATE saved_games
+      SET stats = ?, hp = ?, gold = ?, inventory = ?, current_scene_id = ?, game_history = ?, last_played = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      JSON.stringify(previousState.stats),
+      previousState.hp,
+      previousState.gold,
+      JSON.stringify(previousState.inventory),
+      previousState.scene_id,
+      JSON.stringify(gameHistory),
+      id
+    );
+
+    // Get the previous scene
+    const previousScene = db.prepare('SELECT * FROM scenes WHERE id = ?').get(previousState.scene_id);
+
+    const sceneData = {
+      ...previousScene,
+      choices: JSON.parse(previousScene.choices),
+      is_key_scene: Boolean(previousScene.is_key_scene)
+    };
+
+    res.json({
+      success: true,
+      message: 'Went back to previous scene',
+      scene: sceneData,
+      character: {
+        hp: previousState.hp,
+        gold: previousState.gold,
+        inventory: previousState.inventory,
+        stats: previousState.stats
+      }
+    });
+  } catch (error) {
+    console.error('Error going back:', error);
+    res.status(500).json({
+      error: 'Failed to go back',
+      details: error.message
+    });
+  }
+});
+
+/**
  * POST /api/games/:id/save
  * Manual save
  */
@@ -392,6 +493,79 @@ router.post('/:id/save', (req, res) => {
     console.error('Error saving game:', error);
     res.status(500).json({
       error: 'Failed to save game',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/games/:id/restart
+ * Restart game with same character (reset to first scene, restore HP)
+ */
+router.post('/:id/restart', (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get current game
+    const savedGame = db.prepare('SELECT * FROM saved_games WHERE id = ?').get(id);
+    if (!savedGame) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Get first scene of the adventure
+    const firstScene = db.prepare(`
+      SELECT * FROM scenes
+      WHERE adventure_id = ?
+      ORDER BY scene_order
+      LIMIT 1
+    `).get(savedGame.adventure_id);
+
+    if (!firstScene) {
+      return res.status(400).json({ error: 'Adventure has no scenes' });
+    }
+
+    // Calculate max HP from class and CON
+    const stats = JSON.parse(savedGame.stats);
+    const conMod = Math.floor((stats.CON - 10) / 2);
+    const baseHP = {
+      'Fighter': 10,
+      'Wizard': 6,
+      'Rogue': 8,
+      'Cleric': 8,
+      'Ranger': 10
+    };
+    const maxHp = (baseHP[savedGame.character_class] || 8) + conMod;
+
+    // Reset game to first scene, restore HP, clear history
+    db.prepare(`
+      UPDATE saved_games
+      SET current_scene_id = ?,
+          hp = ?,
+          gold = 0,
+          inventory = '[]',
+          game_history = '[]',
+          last_played = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(firstScene.id, maxHp, id);
+
+    res.json({
+      success: true,
+      message: 'Game restarted successfully',
+      scene: {
+        ...firstScene,
+        choices: JSON.parse(firstScene.choices),
+        is_key_scene: Boolean(firstScene.is_key_scene)
+      },
+      character: {
+        hp: maxHp,
+        gold: 0,
+        inventory: []
+      }
+    });
+  } catch (error) {
+    console.error('Error restarting game:', error);
+    res.status(500).json({
+      error: 'Failed to restart game',
       details: error.message
     });
   }

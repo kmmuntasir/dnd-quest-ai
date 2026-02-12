@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
-import { Swords, Heart, Coins, Backpack } from 'lucide-react';
+import { Swords, Heart, Coins, Backpack, Undo2 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Image } from '../components/ui/Image';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
@@ -22,6 +22,12 @@ export function Game() {
   const [selectedChoice, setSelectedChoice] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [narrative, setNarrative] = useState(null);
+  const [transitioning, setTransitioning] = useState(false);
+  const [adventureComplete, setAdventureComplete] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [finalNarrative, setFinalNarrative] = useState(null);
+  const [goingBack, setGoingBack] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
 
   useEffect(() => {
     loadGame();
@@ -43,11 +49,52 @@ export function Game() {
         gold: data.character.gold
       });
       setCurrentScene(data.scene);
+
+      // Check if can go back (has history and not hard mode)
+      const hasHistory = data.gameHistory && data.gameHistory.length > 0;
+      const isHardMode = data.adventure?.difficulty === 'hard';
+      setCanGoBack(hasHistory && !isHardMode);
+
       setLoading(false);
     } catch (error) {
       console.error('Failed to load game:', error);
       setLoading(false);
       alert(error.response?.data?.error || 'Failed to load game. Please try again.');
+    }
+  };
+
+  const handleGoBack = async () => {
+    if (!canGoBack) return;
+
+    try {
+      setGoingBack(true);
+      const response = await axios.post(`${API_BASE_URL}/games/${gameId}/go-back`);
+      const data = response.data;
+
+      // Restore previous state
+      setCurrentScene(data.scene);
+      setCharacter(prev => ({
+        ...prev,
+        hp: data.character.hp,
+        gold: data.character.gold,
+        inventory: data.character.inventory,
+        stats: data.character.stats
+      }));
+
+      // Check if can still go back
+      const gameResponse = await axios.get(`${API_BASE_URL}/games/${gameId}`);
+      const hasHistory = gameResponse.data.gameHistory && gameResponse.data.gameHistory.length > 0;
+      const isHardMode = gameResponse.data.adventure?.difficulty === 'hard';
+      setCanGoBack(hasHistory && !isHardMode);
+
+      // Clear any narrative
+      setNarrative(null);
+      setSelectedChoice(null);
+      setGoingBack(false);
+    } catch (error) {
+      console.error('Failed to go back:', error);
+      setGoingBack(false);
+      alert(error.response?.data?.error || 'Failed to go back. Please try again.');
     }
   };
 
@@ -85,14 +132,28 @@ export function Game() {
 
       // Check for game over
       if (data.gameOver) {
-        alert(data.victory ? 'Congratulations! You won!' : 'Game Over! You have been defeated.');
-        // Could navigate to a game over screen here
+        if (data.victory) {
+          // Victory! Show adventure complete modal
+          setAdventureComplete(true);
+        } else {
+          // Defeat - show defeat modal
+          setFinalNarrative(data.narrative);
+          setGameOver(true);
+        }
       } else if (data.nextScene) {
         // Progress to next scene after a short delay to show narrative
+        setTransitioning(true);
         setTimeout(() => {
           setCurrentScene(data.nextScene);
           setNarrative(null); // Clear narrative for new scene
-        }, 1500);
+          setTransitioning(false);
+          // After moving to a new scene, we can go back (if not hard mode)
+          const isHardMode = game?.adventure?.difficulty === 'hard';
+          setCanGoBack(!isHardMode);
+        }, 2000);
+      } else {
+        // No next scene but not game over - adventure is complete
+        setAdventureComplete(true);
       }
 
       // Reset for next choice
@@ -297,6 +358,22 @@ export function Game() {
               </div>
             )}
 
+            {/* Scene Transition Indicator */}
+            {transitioning && (
+              <div className="mb-6">
+                <SlideUp delay={100}>
+                  <div className="bg-accent-gold/20 p-6 rounded-2xl border border-accent-gold/50 text-center">
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="animate-spin w-6 h-6 border-2 border-accent-gold border-t-transparent rounded-full"></div>
+                      <span className="font-display text-xl text-accent-gold">
+                        Venturing forth to the next scene...
+                      </span>
+                    </div>
+                  </div>
+                </SlideUp>
+              </div>
+            )}
+
             {/* Scene Number */}
             <div className="text-center mb-4">
               <span className="inline-block bg-background-dark/50 px-4 py-2 rounded-full text-sm text-gray-400">
@@ -352,8 +429,143 @@ export function Game() {
               <Backpack className="w-5 h-5 text-gray-400" />
               Save Game
             </button>
+
+            {/* Go Back Button - Only shown if can go back (not hard mode and has history) */}
+            {canGoBack && (
+              <button
+                onClick={handleGoBack}
+                disabled={goingBack || rolling || transitioning}
+                className="w-full px-6 py-3 bg-accent-purple/20 hover:bg-accent-purple/30 text-accent-purple rounded-lg border border-accent-purple/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {goingBack ? (
+                  <>
+                    <div className="animate-spin w-5 h-5 border-2 border-accent-purple border-t-transparent rounded-full"></div>
+                    Going Back...
+                  </>
+                ) : (
+                  <>
+                    <Undo2 className="w-5 h-5" />
+                    Go Back & Retry
+                  </>
+                )}
+              </button>
+            )}
           </aside>
         </div>
+
+        {/* Adventure Complete Modal */}
+        {adventureComplete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+            <FadeIn>
+              <div className="bg-background-card p-8 rounded-2xl border border-accent-gold max-w-md mx-4 text-center">
+                <div className="text-6xl mb-4">🏆</div>
+                <h2 className="font-display text-3xl font-bold text-accent-gold mb-4">
+                  Adventure Complete!
+                </h2>
+                <p className="text-gray-300 mb-6">
+                  Congratulations, {character?.name}! You have completed this chapter of your journey.
+                </p>
+                <div className="bg-background-dark/50 p-4 rounded-lg mb-6">
+                  <h3 className="font-display text-lg text-white mb-2">Final Stats</h3>
+                  <div className="flex justify-center gap-6">
+                    <div>
+                      <span className="text-accent-red">❤️</span>
+                      <span className="text-white ml-1">{character?.hp} HP</span>
+                    </div>
+                    <div>
+                      <span className="text-accent-gold">💰</span>
+                      <span className="text-white ml-1">{character?.gold} Gold</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await axios.post(`${API_BASE_URL}/games/${gameId}/restart`);
+                        window.location.reload();
+                      } catch (error) {
+                        console.error('Failed to restart:', error);
+                        window.location.href = '/library';
+                      }
+                    }}
+                    className="px-6 py-3 bg-accent-gold text-background-dark font-bold rounded-lg hover:bg-accent-gold/90 transition-colors"
+                  >
+                    Play Again (Same Character)
+                  </button>
+                  <button
+                    onClick={() => window.location.href = `/create-character/${game?.adventure?.id || game?.adventure_id}`}
+                    className="px-6 py-3 bg-background-input text-white font-bold rounded-lg hover:bg-background-dark transition-colors border border-background-input"
+                  >
+                    New Character
+                  </button>
+                  <button
+                    onClick={() => window.location.href = '/library'}
+                    className="px-6 py-3 text-gray-400 hover:text-white transition-colors"
+                  >
+                    Return to Library
+                  </button>
+                </div>
+              </div>
+            </FadeIn>
+          </div>
+        )}
+
+        {/* Game Over / Defeat Modal */}
+        {gameOver && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+            <FadeIn>
+              <div className="bg-background-card p-8 rounded-2xl border border-accent-red max-w-md mx-4 text-center">
+                <div className="text-6xl mb-4">💀</div>
+                <h2 className="font-display text-3xl font-bold text-accent-red mb-4">
+                  Game Over
+                </h2>
+                <p className="text-gray-300 mb-6">
+                  Alas, {character?.name} has fallen in battle. Your legend will be remembered.
+                </p>
+                {finalNarrative && (
+                  <div className="bg-background-dark/50 p-4 rounded-lg mb-6 text-left">
+                    <p className="text-gray-300 text-sm italic">
+                      {finalNarrative.substring(0, 200)}...
+                    </p>
+                  </div>
+                )}
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={async () => {
+                      // Restart with same character
+                      try {
+                        await axios.post(`${API_BASE_URL}/games/${gameId}/restart`);
+                        window.location.reload();
+                      } catch (error) {
+                        console.error('Failed to restart:', error);
+                        window.location.href = '/library';
+                      }
+                    }}
+                    className="px-6 py-3 bg-accent-red text-white font-bold rounded-lg hover:bg-accent-red/80 transition-colors"
+                  >
+                    Try Again (Same Character)
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Create new character for same adventure
+                      window.location.href = `/create-character/${game?.adventure?.id || game?.adventure_id}`;
+                    }}
+                    className="px-6 py-3 bg-background-input text-white font-bold rounded-lg hover:bg-background-dark transition-colors border border-background-input"
+                  >
+                    New Character
+                  </button>
+                  <button
+                    onClick={() => window.location.href = '/library'}
+                    className="px-6 py-3 text-gray-400 hover:text-white transition-colors"
+                  >
+                    Return to Library
+                  </button>
+                </div>
+              </div>
+            </FadeIn>
+          </div>
+        )}
       </div>
     </div>
   );
