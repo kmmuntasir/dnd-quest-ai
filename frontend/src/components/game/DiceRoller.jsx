@@ -1,35 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
 export function DiceRoller({ onRoll, disabled = false }) {
   const [rolling, setRolling] = useState(false);
   const [diceValue, setDiceValue] = useState(1);
   const [rotation, setRotation] = useState(0);
+  const finalValueRef = useRef(null);
 
-  const rollDice = () => {
+  const rollDice = useCallback(() => {
     if (rolling || disabled) return;
 
     setRolling(true);
     const finalValue = Math.floor(Math.random() * 20) + 1;
-    const newRotation = rotation + 720 + (finalValue * 45); // Multiple rotations
+    finalValueRef.current = finalValue;
+  }, [rolling, disabled]);
 
-    // Animate
+  // Handle dice rolling animation with proper cleanup
+  useEffect(() => {
+    if (!rolling || !finalValueRef.current) return;
+
+    const finalValue = finalValueRef.current;
     let currentRotation = rotation;
-    const animate = setInterval(() => {
+    let isCancelled = false;
+
+    const animateInterval = setInterval(() => {
+      if (isCancelled) return;
       currentRotation += 30;
       setRotation(currentRotation);
-      const tempValue = Math.floor(Math.random() * 20) + 1;
-      setDiceValue(tempValue);
+      setDiceValue(Math.floor(Math.random() * 20) + 1);
     }, 50);
 
-    setTimeout(() => {
-      clearInterval(animate);
+    const animationTimeout = setTimeout(() => {
+      if (isCancelled) return;
+      clearInterval(animateInterval);
+      const newRotation = currentRotation + 720 + (finalValue * 45);
       setRotation(newRotation);
       setDiceValue(finalValue);
       setRolling(false);
       onRoll(finalValue);
+      finalValueRef.current = null;
     }, 2000);
-  };
+
+    return () => {
+      isCancelled = true;
+      clearInterval(animateInterval);
+      clearTimeout(animationTimeout);
+    };
+  }, [rolling, onRoll]);
 
   return (
     <div className="flex flex-col items-center gap-8">

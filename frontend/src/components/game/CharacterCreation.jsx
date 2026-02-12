@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import { User, Shield, Wand, Eye, Heart, Swords, Wand2, RefreshCw, Dices } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody, CardFooter } from '../ui/Card';
 import { LoadingSpinner, LoadingPage } from '../ui/LoadingSpinner';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { useToast } from '../ui/ToastContext';
+import { adventuresAPI, gamesAPI } from '../../services/api';
 
 const classes = [
   {
@@ -66,19 +65,13 @@ const generateRandomStats = () => ({
 export function CharacterCreation() {
   const navigate = useNavigate();
   const { adventureId } = useParams();
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: '',
     class: 'Fighter'
   });
   const [stats, setStats] = useState(generateRandomStats);
   const [generatingName, setGeneratingName] = useState(false);
-
-  // Roll 3d6 for a stat
-  const rollStat = () => {
-    return Math.floor(Math.random() * 6) + 1 +
-           Math.floor(Math.random() * 6) + 1 +
-           Math.floor(Math.random() * 6) + 1;
-  };
 
   const rollAllStats = () => {
     setStats({
@@ -95,16 +88,16 @@ export function CharacterCreation() {
   const handleGenerateName = async () => {
     setGeneratingName(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/adventures/generate-character-name`, {
+      const data = await adventuresAPI.generateCharacterName({
         characterClass: formData.class
       });
       setFormData(prev => ({
         ...prev,
-        name: response.data.name
+        name: data.name
       }));
     } catch (error) {
       console.error('Failed to generate name:', error);
-      alert(error.response?.data?.error || 'Failed to generate name. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to generate name. Please try again.');
     } finally {
       setGeneratingName(false);
     }
@@ -121,22 +114,22 @@ export function CharacterCreation() {
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      alert('Please enter a character name');
+      toast.warning('Please enter a character name');
       return;
     }
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/games/start`, {
+      const data = await gamesAPI.start({
         adventureId: parseInt(adventureId, 10),
         characterName: formData.name,
         characterClass: formData.class
       });
 
       // Navigate to the game with the returned game ID
-      navigate(`/game/${response.data.gameId}`, { replace: true });
+      navigate(`/game/${data.gameId}`, { replace: true });
     } catch (error) {
       console.error('Failed to create character:', error);
-      alert(error.response?.data?.error || 'Failed to create character. Please try again.');
+      toast.error(error.response?.data?.error || 'Failed to create character. Please try again.');
     }
   };
 

@@ -1,6 +1,36 @@
 import axios from 'axios';
 import { API_BASE_URL, API_TIMEOUT } from '../config/api';
 
+/**
+ * Safe localStorage utilities
+ * Handles errors in environments where localStorage is unavailable
+ */
+const safeStorage = {
+  get: (key) => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set: (key, value) => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  remove: (key) => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -14,7 +44,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     // Add auth token if available
-    const token = localStorage.getItem('auth_token');
+    const token = safeStorage.get('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -36,11 +66,11 @@ api.interceptors.response.use(
     // Handle common errors
     if (error.response) {
       const { status, data } = error.response;
-      
+
       switch (status) {
         case 401:
           // Unauthorized
-          localStorage.removeItem('auth_token');
+          safeStorage.remove('auth_token');
           window.location.href = '/login';
           break;
         case 404:
@@ -69,6 +99,8 @@ api.interceptors.response.use(
  */
 export const adventuresAPI = {
   generate: (data) => api.post('/api/adventures/generate', data),
+  generateCharacterName: (data) => api.post('/api/adventures/generate-character-name', data),
+  generateContext: (data) => api.post('/api/adventures/generate-context', data),
   getById: (id) => api.get(`/api/adventures/${id}`),
   getAll: () => api.get('/api/adventures'),
   delete: (id) => api.delete(`/api/adventures/${id}`)
@@ -81,6 +113,8 @@ export const gamesAPI = {
   start: (data) => api.post('/api/games/start', data),
   getById: (id) => api.get(`/api/games/${id}`),
   submitChoice: (id, data) => api.post(`/api/games/${id}/choice`, data),
+  goBack: (id) => api.post(`/api/games/${id}/go-back`),
+  restart: (id) => api.post(`/api/games/${id}/restart`),
   save: (id) => api.post(`/api/games/${id}/save`)
 };
 
@@ -99,6 +133,13 @@ export const settingsAPI = {
   get: () => api.get('/api/settings'),
   update: (data) => api.put('/api/settings', data),
   testAI: () => api.get('/api/settings/ai/test')
+};
+
+/**
+ * Images API
+ */
+export const imagesAPI = {
+  regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`)
 };
 
 /**

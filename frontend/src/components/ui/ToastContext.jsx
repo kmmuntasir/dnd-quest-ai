@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle, XCircle, Info, AlertCircle, X } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -86,13 +86,13 @@ function ToastItem({ toast, onDismiss }) {
 
   const Icon = icons[toast.type];
 
-  // Auto-dismiss
-  useState(() => {
+  // Auto-dismiss with cleanup
+  useEffect(() => {
     if (toast.duration > 0) {
       const timer = setTimeout(onDismiss, toast.duration);
       return () => clearTimeout(timer);
     }
-  }, [toast.duration]);
+  }, [toast.duration, onDismiss]);
 
   return (
     <div

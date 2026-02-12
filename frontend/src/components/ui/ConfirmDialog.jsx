@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 /**
  * Confirmation Dialog component
@@ -156,8 +156,5 @@ export function useConfirmDialog() {
 
   return { confirm, dialogProps };
 }
-
-// Need to import useState for useConfirmDialog
-import { useState } from 'react';
 
 export default ConfirmDialog;

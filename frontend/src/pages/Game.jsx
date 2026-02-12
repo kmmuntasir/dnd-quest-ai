@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, Heart, Coins, Backpack, Undo2, RefreshCw } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Image, resolveImageUrl } from '../components/ui/Image';
@@ -10,11 +9,11 @@ import { DiceRoller } from '../components/game/DiceRoller';
 import { ChoicesList } from '../components/game/Choices';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 import { useToast } from '../components/ui/ToastContext';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { gamesAPI, imagesAPI } from '../services/api';
 
 export function Game() {
   const { gameId } = useParams();
+  const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [game, setGame] = useState(null);
@@ -32,14 +31,9 @@ export function Game() {
   const [canGoBack, setCanGoBack] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  useEffect(() => {
-    loadGame();
-  }, [gameId]);
-
-  const loadGame = async () => {
+  const loadGame = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/games/${gameId}`);
-      const data = response.data;
+      const data = await gamesAPI.getById(gameId);
 
       setGame(data);
       setCharacter({
@@ -64,15 +58,18 @@ export function Game() {
       setLoading(false);
       toast.error(error.response?.data?.error || 'Failed to load game. Please try again.');
     }
-  };
+  }, [gameId, toast]);
+
+  useEffect(() => {
+    loadGame();
+  }, [loadGame]);
 
   const handleGoBack = async () => {
     if (!canGoBack) return;
 
     try {
       setGoingBack(true);
-      const response = await axios.post(`${API_BASE_URL}/games/${gameId}/go-back`);
-      const data = response.data;
+      const data = await gamesAPI.goBack(gameId);
 
       // Restore previous state
       setCurrentScene(data.scene);
@@ -85,9 +82,9 @@ export function Game() {
       }));
 
       // Check if can still go back
-      const gameResponse = await axios.get(`${API_BASE_URL}/games/${gameId}`);
-      const hasHistory = gameResponse.data.gameHistory && gameResponse.data.gameHistory.length > 0;
-      const isHardMode = gameResponse.data.adventure?.difficulty === 'hard';
+      const gameData = await gamesAPI.getById(gameId);
+      const hasHistory = gameData.gameHistory && gameData.gameHistory.length > 0;
+      const isHardMode = gameData.adventure?.difficulty === 'hard';
       setCanGoBack(hasHistory && !isHardMode);
 
       // Clear any narrative
@@ -106,12 +103,12 @@ export function Game() {
 
     try {
       setRegenerating(true);
-      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${currentScene.image_hash}/regenerate`);
+      const data = await imagesAPI.regenerate(currentScene.image_hash);
 
-      if (response.data.success) {
+      if (data.success) {
         // Update the current scene with the new hash and URL
-        const newHash = response.data.newHash;
-        const newUrl = response.data.newUrl;
+        const newHash = data.newHash;
+        const newUrl = data.newUrl;
 
         setCurrentScene(prev => ({
           ...prev,
@@ -135,7 +132,7 @@ export function Game() {
 
     try {
       setRolling(true);
-      const response = await axios.post(`${API_BASE_URL}/games/${gameId}/choice`, {
+      const response = await gamesAPI.submitChoice(gameId, {
         choiceIndex: selectedChoice,
         diceRoll: diceValue
       });
@@ -458,7 +455,7 @@ export function Game() {
             <button
               onClick={async () => {
                 try {
-                  await axios.post(`${API_BASE_URL}/games/${gameId}/save`);
+                  await gamesAPI.save(gameId);
                   toast.success('Game saved successfully!');
                 } catch (error) {
                   console.error('Failed to save game:', error);
@@ -523,11 +520,11 @@ export function Game() {
                   <button
                     onClick={async () => {
                       try {
-                        await axios.post(`${API_BASE_URL}/games/${gameId}/restart`);
-                        window.location.reload();
+                        await gamesAPI.restart(gameId);
+                        loadGame(); // Reload game state instead of page
                       } catch (error) {
                         console.error('Failed to restart:', error);
-                        window.location.href = '/library';
+                        navigate('/library');
                       }
                     }}
                     className="px-6 py-3 bg-accent-gold text-background-dark font-bold rounded-lg hover:bg-accent-gold/90 transition-colors"
@@ -535,13 +532,13 @@ export function Game() {
                     Play Again (Same Character)
                   </button>
                   <button
-                    onClick={() => window.location.href = `/create-character/${game?.adventure?.id || game?.adventure_id}`}
+                    onClick={() => navigate(`/create-character/${game?.adventure?.id || game?.adventure_id}`)}
                     className="px-6 py-3 bg-background-input text-white font-bold rounded-lg hover:bg-background-dark transition-colors border border-background-input"
                   >
                     New Character
                   </button>
                   <button
-                    onClick={() => window.location.href = '/library'}
+                    onClick={() => navigate('/library')}
                     className="px-6 py-3 text-gray-400 hover:text-white transition-colors"
                   >
                     Return to Library
@@ -576,11 +573,11 @@ export function Game() {
                     onClick={async () => {
                       // Restart with same character
                       try {
-                        await axios.post(`${API_BASE_URL}/games/${gameId}/restart`);
-                        window.location.reload();
+                        await gamesAPI.restart(gameId);
+                        loadGame(); // Reload game state instead of page
                       } catch (error) {
                         console.error('Failed to restart:', error);
-                        window.location.href = '/library';
+                        navigate('/library');
                       }
                     }}
                     className="px-6 py-3 bg-accent-red text-white font-bold rounded-lg hover:bg-accent-red/80 transition-colors"
@@ -590,14 +587,14 @@ export function Game() {
                   <button
                     onClick={() => {
                       // Create new character for same adventure
-                      window.location.href = `/create-character/${game?.adventure?.id || game?.adventure_id}`;
+                      navigate(`/create-character/${game?.adventure?.id || game?.adventure_id}`);
                     }}
                     className="px-6 py-3 bg-background-input text-white font-bold rounded-lg hover:bg-background-dark transition-colors border border-background-input"
                   >
                     New Character
                   </button>
                   <button
-                    onClick={() => window.location.href = '/library'}
+                    onClick={() => navigate('/library')}
                     className="px-6 py-3 text-gray-400 hover:text-white transition-colors"
                   >
                     Return to Library
