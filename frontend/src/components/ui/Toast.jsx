@@ -27,7 +27,7 @@ export function Toast({
   const Icon = icons[type];
 
   // Auto-close after duration
-  React.useEffect(() => {
+  useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(onClose, duration);
       return () => clearTimeout(timer);
