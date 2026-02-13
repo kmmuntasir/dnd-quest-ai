@@ -16,7 +16,28 @@ const optionalVars = {
   'NODE_ENV': 'development',
   'DATABASE_PATH': './data/dnd_ai.db',
   'LOG_LEVEL': 'info',
-  'JWT_SECRET': 'dev-secret-key-change-in-production'
+  'JWT_SECRET': 'dev-secret-key-change-in-production',
+  // Image Provider Configuration
+  'IMAGE_PROVIDER_PRIMARY': 'pollinations',
+  'IMAGE_PROVIDER_FALLBACKS': 'aihorde',
+  // AI Horde Configuration
+  'AI_HORDE_MODEL': 'AlbedoBase XL',
+  'AI_HORDE_STEPS': '25',
+  'AI_HORDE_SAMPLER': 'k_euler',
+  'AI_HORDE_WIDTH': '1024',
+  'AI_HORDE_HEIGHT': '1024',
+  'AI_HORDE_CFG_SCALE': '7',
+  'AI_HORDE_POLL_INTERVAL': '5000',
+  'AI_HORDE_MAX_POLL_ATTEMPTS': '120',
+  'AI_HORDE_TIMEOUT': '60000',
+  // Pollinations Configuration
+  'POLLINATIONS_TIMEOUT': '30000',
+  // Text Provider Configuration
+  'TEXT_PROVIDER_PRIMARY': 'groq',
+  'TEXT_PROVIDER_FALLBACKS': '',
+  // Groq Configuration
+  'GROQ_MODEL': 'llama-3.3-70b-versatile',
+  'GROQ_TIMEOUT': '45000'
 };
 
 // Sensitive patterns to mask in logs
@@ -56,6 +77,16 @@ function validateEnv() {
     warnings.push('GROQ_API_KEY appears to be a placeholder value');
   }
 
+  // Check AI Horde API key if it's in the fallback chain
+  const imageFallbacks = (process.env.IMAGE_PROVIDER_FALLBACKS || '').split(',').map(s => s.trim());
+  if (imageFallbacks.includes('aihorde') || process.env.IMAGE_PROVIDER_PRIMARY === 'aihorde') {
+    if (!process.env.AI_HORDE_API_KEY) {
+      warnings.push('AI_HORDE_API_KEY is not set - AI Horde provider will not be available');
+    } else if (process.env.AI_HORDE_API_KEY.includes('your_')) {
+      warnings.push('AI_HORDE_API_KEY appears to be a placeholder value');
+    }
+  }
+
   // Check for JWT_SECRET in production - FAIL if insecure
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET ||
@@ -86,7 +117,15 @@ function validateEnv() {
     nodeEnv: process.env.NODE_ENV,
     port: process.env.PORT,
     groqKeyConfigured: !!process.env.GROQ_API_KEY,
-    groqKeyPrefix: maskSensitive(process.env.GROQ_API_KEY)
+    groqKeyPrefix: maskSensitive(process.env.GROQ_API_KEY),
+    imageProvider: {
+      primary: process.env.IMAGE_PROVIDER_PRIMARY,
+      fallbacks: process.env.IMAGE_PROVIDER_FALLBACKS,
+      aiHordeKeyConfigured: !!process.env.AI_HORDE_API_KEY
+    },
+    textProvider: {
+      primary: process.env.TEXT_PROVIDER_PRIMARY
+    }
   });
 }
 

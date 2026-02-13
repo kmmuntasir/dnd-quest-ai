@@ -1,111 +1,34 @@
-const axios = require('axios');
-const crypto = require('crypto');
-const path = require('path');
-const fs = require('fs');
-const db = require('../config/database');
+/**
+ * Image Service Facade
+ * Delegates to the provider system while maintaining backward compatibility
+ */
+
 const { logger } = require('../utils/logger');
-const { CircuitBreaker, retryWithBackoff } = require('../utils/circuitBreaker');
+const {
+  getImageProvider,
+  executeImageWithFallback,
+  getProvidersHealth,
+  initializeProviders,
+  imageProviderConfig
+} = require('../providers');
 
-// API key for Pollinations.ai (removes watermark when provided)
-const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY;
+// Database access for backward compatibility
+const db = require('../config/database');
 
-// App referrer for Pollinations.ai API identification
-const APP_REFERRER = 'dungeons-and-dragons-rpg';
-
-// Cache directory for images
-const CACHE_DIR = path.resolve(__dirname, '../../storage/images');
-
-// Configuration
-const IMAGE_TIMEOUT = parseInt(process.env.IMAGE_TIMEOUT) || 30000; // 30 seconds (reduced from 90)
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY = 1000;
-
-// Circuit breaker for Pollinations API
-const pollinationsCircuitBreaker = new CircuitBreaker({
-  name: 'pollinations-api',
-  failureThreshold: 5,
-  resetTimeout: 30000, // 30 seconds before trying again
-  successThreshold: 2
-});
+// Track service status for backward compatibility
+let serviceDownDetected = false;
+let serviceDownTime = null;
 
 /**
- * Generate a random hash for image identification
- * @returns {string} Random 32-character hash
+ * Initialize the image service
  */
-function generateHash() {
-  return crypto.randomBytes(16).toString('hex');
+function init() {
+  initializeProviders();
+  logger.info('Image service initialized with provider facade');
 }
 
-/**
- * Build Pollinations.ai URL from parameters
- * @param {string} prompt - Image prompt
- * @param {number} width - Image width
- * @param {number} height - Image height
- * @param {number} seed - Random seed
- * @returns {string} Pollinations.ai URL
- */
-function buildPollinationsUrl(prompt, width, height, seed) {
-  const encodedPrompt = encodeURIComponent(prompt);
-
-  const params = new URLSearchParams({
-    width: width.toString(),
-    height: height.toString(),
-    seed: seed.toString(),
-    enhance: 'true',
-    model: 'flux',
-    referrer: APP_REFERRER
-  });
-
-  if (POLLINATIONS_API_KEY) {
-    params.append('nologo', 'true');
-  }
-
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?${params.toString()}`;
-}
-
-/**
- * Store image metadata in database
- * @param {string} hash - Image hash
- * @param {string} prompt - Image prompt
- * @param {string} pollinationsUrl - Pollinations.ai URL
- * @param {number} width - Image width
- * @param {number} height - Image height
- */
-async function storeImageMetadata(hash, prompt, pollinationsUrl, width, height) {
-  try {
-    const result = await db.run(`
-      INSERT INTO images (hash, prompt, pollinations_url, width, height)
-      VALUES (?, ?, ?, ?, ?)
-    `, [hash, prompt, pollinationsUrl, width, height]);
-
-    if (result.changes === 0) {
-      logger.warn('Image metadata not inserted - hash may already exist', { hash });
-    }
-  } catch (error) {
-    logger.error('Failed to store image metadata', { hash, error: error.message });
-    throw error; // Re-throw to let caller handle it
-  }
-}
-
-/**
- * Update cached path in database
- * @param {string} hash - Image hash
- * @param {string} cachedPath - Path to cached file
- */
-async function updateCachedPath(hash, cachedPath) {
-  await db.run(`
-    UPDATE images SET cached_path = ? WHERE hash = ?
-  `, [cachedPath, hash]);
-}
-
-/**
- * Get image metadata from database
- * @param {string} hash - Image hash
- * @returns {Promise<Object|null>} Image metadata or null
- */
-async function getImageMetadata(hash) {
-  return await db.get('SELECT * FROM images WHERE hash = ?', [hash]);
-}
+// Initialize on module load
+init();
 
 /**
  * Generate image and return hash
@@ -117,33 +40,21 @@ async function getImageMetadata(hash) {
  * @returns {Promise<Object>} Object with hash and url properties
  */
 async function generateImage(prompt, options = {}) {
-  const { style = 'fantasy art', width = 1024, height = 1024 } = options;
-
-  // Enhance prompt with style keywords
-  const enhancedPrompt = `${prompt}, ${style} style, high quality, detailed, atmospheric`;
-
   try {
-    // Generate unique hash for this image
-    const hash = generateHash();
+    // Use fallback chain for generation
+    const provider = getImageProvider(imageProviderConfig.primary);
+    if (provider) {
+      return await provider.generateImage(prompt, options);
+    }
 
-    // Generate seed based on hash for reproducibility
-    const seed = parseInt(hash.substring(0, 8), 16) % 1000000;
-
-    // Build Pollinations URL
-    const pollinationsUrl = buildPollinationsUrl(enhancedPrompt, width, height, seed);
-
-    // Store metadata in database
-    await storeImageMetadata(hash, enhancedPrompt, pollinationsUrl, width, height);
-
-    // Return hash instead of URL - the /api/images/:hash endpoint will handle serving
-    return {
-      hash,
-      url: `/api/images/${hash}`
-    };
+    // Fallback to direct execution with fallback chain
+    return await executeImageWithFallback('generateImage', [prompt, options]);
   } catch (error) {
-    logger.error('Image generation error', { error: error.message });
-    // Return a fallback hash (will show placeholder)
-    const fallbackHash = 'fallback-' + generateHash();
+    logger.error('Image generation failed in facade', { error: error.message });
+
+    // Return fallback hash for backward compatibility
+    const crypto = require('crypto');
+    const fallbackHash = 'fallback-' + crypto.randomBytes(16).toString('hex');
     return {
       hash: fallbackHash,
       url: `/api/images/${fallbackHash}`
@@ -151,143 +62,19 @@ async function generateImage(prompt, options = {}) {
   }
 }
 
-// Track if service is currently down (530/5xx errors)
-let serviceDownDetected = false;
-let serviceDownTime = null;
-
 /**
- * Check if the image service is currently detected as down
- * @returns {Object} Status object with isDown and lastDetected properties
- */
-function getServiceStatus() {
-  // Auto-recover after 5 minutes
-  if (serviceDownDetected && serviceDownTime && (Date.now() - serviceDownTime > 300000)) {
-    serviceDownDetected = false;
-    serviceDownTime = null;
-    logger.info('Image service auto-recovery triggered');
-  }
-  return {
-    isDown: serviceDownDetected,
-    lastDetected: serviceDownTime
-  };
-}
-
-/**
- * Mark service as down
- */
-function markServiceDown() {
-  serviceDownDetected = true;
-  serviceDownTime = Date.now();
-  logger.warn('Image service marked as down', { serviceDownTime });
-}
-
-/**
- * Mark service as up (after successful fetch)
- */
-function markServiceUp() {
-  if (serviceDownDetected) {
-    logger.info('Image service recovered');
-  }
-  serviceDownDetected = false;
-  serviceDownTime = null;
-}
-
-/**
- * Fetch and cache an image from Pollinations.ai
- * Uses circuit breaker and retry logic for reliability
+ * Fetch and cache an image
+ * Uses fallback chain when primary provider fails
  * @param {string} hash - Image hash
  * @returns {Promise<string|null>} Path to cached file or null on error
  */
 async function fetchAndCacheImage(hash) {
-  const metadata = await getImageMetadata(hash);
-
-  if (!metadata) {
-    logger.warn('No metadata found for hash', { hash });
-    return null;
-  }
-
-  // If already cached, return the path
-  if (metadata.cached_path && fs.existsSync(metadata.cached_path)) {
-    return metadata.cached_path;
-  }
-
-  // Check circuit breaker
-  if (!pollinationsCircuitBreaker.canRequest()) {
-    logger.warn('Circuit breaker is open, skipping image fetch', { hash });
-    return null;
-  }
-
   try {
-    const cachedPath = await retryWithBackoff(
-      async () => fetchImageFromUrl(metadata.pollinations_url, hash),
-      {
-        maxRetries: MAX_RETRIES,
-        baseDelay: RETRY_BASE_DELAY,
-        shouldRetry: (error) => {
-          // Retry on network errors or 5xx responses (including 530)
-          return !error.response || error.response.status >= 500;
-        }
-      }
-    );
-
-    // Update circuit breaker on success
-    pollinationsCircuitBreaker.recordSuccess();
-    markServiceUp();
-
-    // Update database with cached path
-    if (cachedPath) {
-      await updateCachedPath(hash, cachedPath);
-    }
-
-    return cachedPath;
+    return await executeImageWithFallback('fetchImage', [hash]);
   } catch (error) {
-    // Update circuit breaker on failure
-    pollinationsCircuitBreaker.recordFailure();
-
-    // Detect if it's a service-down error (530, 502, 503)
-    if (error.response && (error.response.status === 530 || error.response.status === 502 || error.response.status === 503)) {
-      markServiceDown();
-    }
-
-    logger.error('Failed to fetch image after retries', {
-      hash,
-      error: error.message,
-      statusCode: error.response?.status,
-      circuitState: pollinationsCircuitBreaker.getState().state
-    });
+    logger.error('Failed to fetch image in facade', { hash, error: error.message });
     return null;
   }
-}
-
-/**
- * Fetch image from URL and save to cache
- * @param {string} url - Image URL
- * @param {string} hash - Image hash
- * @returns {Promise<string>} Path to cached file
- */
-async function fetchImageFromUrl(url, hash) {
-  const headers = {};
-  if (POLLINATIONS_API_KEY) {
-    headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
-  }
-
-  logger.info('Fetching image from Pollinations.ai', { hash });
-
-  const response = await axios.get(url, {
-    timeout: IMAGE_TIMEOUT,
-    headers,
-    responseType: 'arraybuffer'
-  });
-
-  if (response.status === 200 && response.data.byteLength > 0) {
-    const cachedPath = path.join(CACHE_DIR, `${hash}.png`);
-    fs.writeFileSync(cachedPath, response.data);
-
-    logger.info('Image cached successfully', { hash });
-    return cachedPath;
-  }
-
-  throw new Error(`Invalid response: status ${response.status}`);
 }
 
 /**
@@ -301,19 +88,21 @@ async function getCachedImage(hash) {
     return null;
   }
 
-  const metadata = await getImageMetadata(hash);
-
-  if (!metadata) {
+  try {
+    return await executeImageWithFallback('fetchImage', [hash]);
+  } catch (error) {
+    logger.error('Failed to get cached image', { hash, error: error.message });
     return null;
   }
+}
 
-  // Check if already cached
-  if (metadata.cached_path && fs.existsSync(metadata.cached_path)) {
-    return metadata.cached_path;
-  }
-
-  // Fetch and cache
-  return fetchAndCacheImage(hash);
+/**
+ * Get image metadata from database
+ * @param {string} hash - Image hash
+ * @returns {Promise<Object|null>} Image metadata or null
+ */
+async function getImageMetadata(hash) {
+  return await db.get('SELECT * FROM images WHERE hash = ?', [hash]);
 }
 
 /**
@@ -354,14 +143,26 @@ async function generateNPCPortrait(npc, style = 'fantasy art') {
  * @returns {Promise<boolean>} True if deleted successfully
  */
 async function deleteImage(hash) {
+  const fs = require('fs');
+  const path = require('path');
+
   try {
     const metadata = await getImageMetadata(hash);
 
     if (metadata) {
       // Delete cached file if exists
-      if (metadata.cached_path && fs.existsSync(metadata.cached_path)) {
-        fs.unlinkSync(metadata.cached_path);
-        logger.info('Deleted cached image', { path: metadata.cached_path });
+      const cacheDir = path.resolve(__dirname, '../../storage/images');
+      const cachedPath = path.join(cacheDir, `${hash}.png`);
+
+      if (fs.existsSync(cachedPath)) {
+        fs.unlinkSync(cachedPath);
+        logger.info('Deleted cached image', { path: cachedPath });
+      }
+
+      // Also check for jpg
+      const jpgPath = path.join(cacheDir, `${hash}.jpg`);
+      if (fs.existsSync(jpgPath)) {
+        fs.unlinkSync(jpgPath);
       }
 
       // Delete from database
@@ -407,139 +208,57 @@ async function deleteAdventureImages(adventureId) {
 }
 
 /**
- * Test Pollinations.ai API connection
- * Uses a realistic prompt to verify the service is actually working
+ * Test image provider connection
  * @returns {Promise<boolean>} True if connection successful
  */
 async function testConnection() {
   try {
-    const params = new URLSearchParams({
-      width: '512',
-      height: '512',
-      seed: Date.now().toString(), // Use timestamp for unique seed
-      referrer: APP_REFERRER
-    });
-
-    if (POLLINATIONS_API_KEY) {
-      params.append('nologo', 'true');
+    const provider = getImageProvider(imageProviderConfig.primary);
+    if (provider) {
+      return await provider.testConnection();
     }
-
-    // Use a realistic prompt similar to what the app generates
-    const testUrl = `https://image.pollinations.ai/prompt/fantasy%20landscape?${params.toString()}`;
-
-    const headers = {};
-    if (POLLINATIONS_API_KEY) {
-      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`;
-    }
-
-    const response = await axios.get(testUrl, {
-      timeout: 60000,
-      headers,
-      responseType: 'arraybuffer'
-    });
-
-    // Check for valid response with actual image data
-    const isValid = response.status === 200 && response.data.byteLength > 1000;
-
-    if (isValid) {
-      markServiceUp();
-    } else {
-      logger.warn('Pollinations test returned empty or small response', {
-        status: response.status,
-        size: response.data.byteLength
-      });
-      markServiceDown();
-    }
-
-    return isValid;
+    return false;
   } catch (error) {
-    logger.error('Pollinations.ai connection test failed', {
-      error: error.message,
-      status: error.response?.status
-    });
-
-    // Mark service as down for 530/5xx errors
-    if (error.response && error.response.status >= 500) {
-      markServiceDown();
-    }
-
+    logger.error('Image provider connection test failed', { error: error.message });
     return false;
   }
 }
 
 /**
- * Regenerate an image with a new seed and new hash
- * Uses circuit breaker and retry logic for reliability
- * @param {string} oldHash - Old image hash to regenerate
- * @returns {Promise<Object>} Result with success status, new hash, and new URL
+ * Regenerate an image with a new seed
+ * @param {string} oldHash - Old image hash
+ * @returns {Promise<Object>} Result with success status and new hash
  */
 async function regenerateImage(oldHash) {
-  const metadata = await getImageMetadata(oldHash);
-
-  if (!metadata) {
-    return { success: false, error: 'Image not found' };
-  }
-
-  // Check circuit breaker
-  if (!pollinationsCircuitBreaker.canRequest()) {
-    return {
-      success: false,
-      error: 'Service temporarily unavailable (circuit breaker open)'
-    };
-  }
-
   try {
-    // Generate a new hash for the new image
-    const newHash = generateHash();
+    const provider = getImageProvider(imageProviderConfig.primary);
 
-    // Generate a new seed using timestamp for randomness
-    const newSeed = Date.now() % 1000000;
+    // Check if provider supports regeneration
+    if (provider && typeof provider.regenerateImage === 'function') {
+      return await provider.regenerateImage(oldHash);
+    }
 
-    // Build new Pollinations URL with new seed
-    const newUrl = buildPollinationsUrl(metadata.prompt, metadata.width, metadata.height, newSeed);
+    // Fallback: Generate new image with original prompt
+    const metadata = await getImageMetadata(oldHash);
+    if (!metadata) {
+      return { success: false, error: 'Image not found' };
+    }
 
-    logger.info('Regenerating image', { oldHash, newHash });
+    const newResult = await generateImage(metadata.prompt, {
+      width: metadata.width,
+      height: metadata.height
+    });
 
-    // Fetch new image with retry logic
-    const cachedPath = await retryWithBackoff(
-      async () => fetchImageFromUrl(newUrl, newHash),
-      {
-        maxRetries: MAX_RETRIES,
-        baseDelay: RETRY_BASE_DELAY,
-        shouldRetry: (error) => {
-          return !error.response || error.response.status >= 500;
-        }
-      }
-    );
-
-    // Record success
-    pollinationsCircuitBreaker.recordSuccess();
-
-    // Store new image metadata in database
-    await storeImageMetadata(newHash, metadata.prompt, newUrl, metadata.width, metadata.height);
-    await updateCachedPath(newHash, cachedPath);
-
-    // Delete old image (file and db record)
     await deleteImage(oldHash);
-
-    logger.info('Image regenerated successfully', { oldHash, newHash });
 
     return {
       success: true,
       oldHash,
-      newHash,
-      newUrl: `/api/images/${newHash}`
+      newHash: newResult.hash,
+      newUrl: newResult.url
     };
   } catch (error) {
-    // Record failure
-    pollinationsCircuitBreaker.recordFailure();
-
-    logger.error('Failed to regenerate image', {
-      oldHash,
-      error: error.message,
-      circuitState: pollinationsCircuitBreaker.getState().state
-    });
-
+    logger.error('Failed to regenerate image', { oldHash, error: error.message });
     return { success: false, error: error.message };
   }
 }
@@ -572,6 +291,51 @@ async function findSceneByImageHash(hash) {
   return await db.get('SELECT * FROM scenes WHERE image_hash = ?', [hash]);
 }
 
+/**
+ * Check if the image service is currently detected as down
+ * @returns {Object} Status object with isDown and lastDetected properties
+ */
+function getServiceStatus() {
+  // Auto-recover after 5 minutes
+  if (serviceDownDetected && serviceDownTime && (Date.now() - serviceDownTime > 300000)) {
+    serviceDownDetected = false;
+    serviceDownTime = null;
+    logger.info('Image service auto-recovery triggered');
+  }
+  return {
+    isDown: serviceDownDetected,
+    lastDetected: serviceDownTime
+  };
+}
+
+/**
+ * Mark service as down
+ */
+function markServiceDown() {
+  serviceDownDetected = true;
+  serviceDownTime = Date.now();
+  logger.warn('Image service marked as down', { serviceDownTime });
+}
+
+/**
+ * Mark service as up
+ */
+function markServiceUp() {
+  if (serviceDownDetected) {
+    logger.info('Image service recovered');
+  }
+  serviceDownDetected = false;
+  serviceDownTime = null;
+}
+
+/**
+ * Get health status of all image providers
+ * @returns {Promise<Object>}
+ */
+async function getProviderHealth() {
+  return getProvidersHealth();
+}
+
 module.exports = {
   generateImage,
   generateSceneImages,
@@ -585,5 +349,8 @@ module.exports = {
   regenerateImage,
   updateSceneImageHash,
   findSceneByImageHash,
-  getServiceStatus
+  getServiceStatus,
+  markServiceDown,
+  markServiceUp,
+  getProviderHealth
 };
