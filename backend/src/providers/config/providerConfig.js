@@ -10,12 +10,12 @@ const { logger } = require('../../utils/logger');
  * Image Provider Configuration
  */
 const imageProviderConfig = {
-  // Primary provider to use (aihorde-sdxl for quality, aihorde for speed)
-  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde-sdxl',
+  // Primary provider to use (aihorde-flux is fast and high quality)
+  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde-flux',
 
   // Fallback providers (comma-separated list)
-  // Falls back to fast aihorde if SDXL fails, then pollinations
-  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde,pollinations')
+  // Falls back to SDXL (quality), then fast aihorde, then pollinations
+  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde-sdxl,aihorde,pollinations')
     .split(',')
     .map(p => p.trim())
     .filter(p => p),
@@ -75,6 +75,28 @@ const imageProviderConfig = {
     timeout: parseInt(process.env.AI_HORDE_SDXL_TIMEOUT) || 180000, // 3 minute overall timeout
     circuitBreaker: {
       failureThreshold: 3, // Lower threshold since SDXL is less reliable
+      resetTimeout: 120000, // 2 minutes
+      successThreshold: 1
+    }
+  },
+
+  // AI Horde Flux-specific config (fast and high quality)
+  // Flux.1-Schnell is fast (~4 steps) and produces excellent results
+  'aihorde-flux': {
+    apiKey: process.env.AI_HORDE_API_KEY || null, // Uses same API key
+    apiUrl: 'https://aihorde.net/api/v2',
+    model: process.env.AI_HORDE_FLUX_MODEL || 'Flux.1-Schnell fp8 (Compact)',
+    steps: parseInt(process.env.AI_HORDE_FLUX_STEPS) || 4, // Flux-Schnell needs only 4 steps
+    sampler: process.env.AI_HORDE_FLUX_SAMPLER || 'k_euler', // MUST be k_euler for Flux
+    width: parseInt(process.env.AI_HORDE_FLUX_WIDTH) || 1024, // Flux native resolution
+    height: parseInt(process.env.AI_HORDE_FLUX_HEIGHT) || 1024, // Flux native resolution
+    cfgScale: parseFloat(process.env.AI_HORDE_FLUX_CFG_SCALE) || 1, // MUST be 1 for Flux
+    // Flux is fast but queue times vary
+    pollInterval: parseInt(process.env.AI_HORDE_FLUX_POLL_INTERVAL) || 3000, // Check every 3s
+    maxPollAttempts: parseInt(process.env.AI_HORDE_FLUX_MAX_POLL_ATTEMPTS) || 180, // 9 min max
+    timeout: parseInt(process.env.AI_HORDE_FLUX_TIMEOUT) || 180000, // 3 minute overall timeout
+    circuitBreaker: {
+      failureThreshold: 3,
       resetTimeout: 120000, // 2 minutes
       successThreshold: 1
     }
@@ -142,7 +164,7 @@ function getTextProviderConfig(providerName) {
  */
 function getAvailableImageProviders() {
   // Only return actual provider config keys, not metadata like 'primary' or 'fallbacks'
-  const providerKeys = ['pollinations', 'aihorde', 'aihorde-sdxl'];
+  const providerKeys = ['pollinations', 'aihorde', 'aihorde-sdxl', 'aihorde-flux'];
   return providerKeys.filter(key => {
     const config = imageProviderConfig[key];
     return config && typeof config === 'object' && !Array.isArray(config);
@@ -183,6 +205,13 @@ function validateProviderConfig() {
   if (primaryImage === 'aihorde-sdxl' || imageProviderConfig.fallbacks.includes('aihorde-sdxl')) {
     if (!imageProviderConfig['aihorde-sdxl'].apiKey) {
       warnings.push('AI_HORDE_API_KEY is not set - AI Horde SDXL provider will not work');
+    }
+  }
+
+  // Check if AI Horde Flux has API key when configured
+  if (primaryImage === 'aihorde-flux' || imageProviderConfig.fallbacks.includes('aihorde-flux')) {
+    if (!imageProviderConfig['aihorde-flux'].apiKey) {
+      warnings.push('AI_HORDE_API_KEY is not set - AI Horde Flux provider will not work');
     }
   }
 
