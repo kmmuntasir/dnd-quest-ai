@@ -87,9 +87,14 @@ export function Gallery() {
 
       // Build status map from images array
       const statusMap = {};
+      let hasNewlyReady = false;
       if (data.images) {
         data.images.forEach(img => {
           statusMap[img.hash] = img.status;
+          // Check if this image is now ready but wasn't before
+          if (img.status === 'ready' && imageStatus[img.hash] && imageStatus[img.hash] !== 'ready') {
+            hasNewlyReady = true;
+          }
         });
       }
 
@@ -100,12 +105,31 @@ export function Gallery() {
         setAdventure(prev => ({ ...prev, status: data.status }));
       }
 
+      // If any images just became ready, refresh the scenes to get updated URLs
+      if (hasNewlyReady || (data.status === 'ready' && adventure?.status !== 'ready')) {
+        // Reload adventure to get fresh image URLs
+        const adventureResponse = await adventuresAPI.getById(adventureId);
+        const adventureData = adventureResponse.data || adventureResponse;
+        setAdventure(adventureData);
+        setScenes(adventureData.scenes || []);
+        // Update selected scene if lightbox is open
+        if (selectedScene) {
+          const updatedScene = adventureData.scenes?.find(s => s.id === selectedScene.id);
+          if (updatedScene) {
+            setSelectedScene({
+              ...updatedScene,
+              image_url: `${updatedScene.image_url}?t=${Date.now()}`
+            });
+          }
+        }
+      }
+
       return data;
     } catch (error) {
       console.error('Failed to load image status:', error);
       return null;
     }
-  }, [adventureId, adventure]);
+  }, [adventureId, adventure, imageStatus, selectedScene]);
 
   // Poll for status updates when images are processing
   useEffect(() => {

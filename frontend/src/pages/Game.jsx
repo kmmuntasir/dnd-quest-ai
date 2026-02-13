@@ -92,20 +92,32 @@ export function Game() {
           statusMap[img.hash] = img.status;
         });
       }
-      setImageStatus(statusMap);
 
-      // Check if current scene image just became ready
+      // Check if current scene image just became ready (status changed)
       if (currentScene?.image_hash) {
-        const currentStatus = statusMap[currentScene.image_hash];
-        if (currentStatus === 'ready') {
+        const previousStatus = imageStatus[currentScene.image_hash];
+        const newStatus = statusMap[currentScene.image_hash];
+
+        // Only refresh if status changed to 'ready' from something else
+        if (newStatus === 'ready' && previousStatus && previousStatus !== 'ready') {
           // Force image refresh by updating the refresh key
           setImageRefreshKey(prev => prev + 1);
+          // Also reload the scene to get the updated URL
+          const gameData = await gamesAPI.getById(gameId);
+          if (gameData.scene) {
+            setCurrentScene({
+              ...gameData.scene,
+              image_url: `${gameData.scene.image_url}?t=${Date.now()}`
+            });
+          }
         }
       }
+
+      setImageStatus(statusMap);
     } catch (error) {
       console.error('Failed to load image status:', error);
     }
-  }, [game?.adventure?.id, game?.adventure_id, currentScene?.image_hash]);
+  }, [game?.adventure?.id, game?.adventure_id, currentScene?.image_hash, imageStatus, gameId]);
 
   // Initial status load when game is loaded
   useEffect(() => {
@@ -121,7 +133,7 @@ export function Game() {
     if (currentImageStatus === 'processing' || currentImageStatus === 'pending' || !currentImageStatus) {
       const interval = setInterval(() => {
         loadImageStatus();
-      }, 3000); // Poll every 3 seconds
+      }, 5000); // Poll every 5 seconds
 
       return () => clearInterval(interval);
     }
