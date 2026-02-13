@@ -178,12 +178,49 @@ export function Game() {
           image_hash: newHash,
           image_url: newUrl
         }));
+
+        // Start polling for status (async regeneration)
+        pollImageStatus(newHash);
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
       toast.error(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
-    } finally {
       setRegenerating(false);
+    }
+  };
+
+  // Poll for image status until ready or failed
+  const pollImageStatus = async (hash, attempts = 0) => {
+    const maxAttempts = 120; // 2 minutes at 1s intervals
+    const pollInterval = 1000; // 1 second
+
+    if (attempts >= maxAttempts) {
+      toast.error('Image generation timed out');
+      setRegenerating(false);
+      return;
+    }
+
+    try {
+      const data = await imagesAPI.getStatus(hash);
+
+      if (data.status === 'ready') {
+        // Image is ready - force reload and stop regenerating
+        setCurrentScene(prev => ({
+          ...prev,
+          image_url: `/api/images/${hash}?t=${Date.now()}`
+        }));
+        setRegenerating(false);
+      } else if (data.status === 'failed') {
+        toast.error(data.error || 'Image generation failed');
+        setRegenerating(false);
+      } else {
+        // Still processing - continue polling
+        setTimeout(() => pollImageStatus(hash, attempts + 1), pollInterval);
+      }
+    } catch (error) {
+      console.error('Error polling image status:', error);
+      // Continue polling on error
+      setTimeout(() => pollImageStatus(hash, attempts + 1), pollInterval);
     }
   };
 

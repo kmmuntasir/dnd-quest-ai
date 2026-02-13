@@ -196,12 +196,53 @@ export function Gallery() {
           ...prev,
           [newHash]: 'processing'
         }));
+
+        // Start polling for status (async regeneration)
+        pollImageStatus(newHash);
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
       alert(error.response?.data?.details || error.response?.data?.error || 'Failed to regenerate image. Please try again.');
-    } finally {
       setRegenerating(false);
+    }
+  };
+
+  // Poll for image status until ready or failed
+  const pollImageStatus = async (hash, attempts = 0) => {
+    const maxAttempts = 120; // 2 minutes at 1s intervals
+    const pollInterval = 1000; // 1 second
+
+    if (attempts >= maxAttempts) {
+      setImageStatus(prev => ({ ...prev, [hash]: 'failed' }));
+      setRegenerating(false);
+      return;
+    }
+
+    try {
+      const response = await imagesAPI.getStatus(hash);
+      const data = response.data || response;
+
+      if (data.status === 'ready') {
+        // Image is ready - update status and stop regenerating
+        setImageStatus(prev => ({ ...prev, [hash]: 'ready' }));
+        setRegenerating(false);
+        // Force image reload by updating the URL with timestamp
+        setSelectedScene(prev => ({
+          ...prev,
+          image_url: `/api/images/${hash}?t=${Date.now()}`
+        }));
+      } else if (data.status === 'failed') {
+        setImageStatus(prev => ({ ...prev, [hash]: 'failed' }));
+        setRegenerating(false);
+        alert(data.error || 'Image generation failed');
+      } else {
+        // Still processing - continue polling
+        setTimeout(() => pollImageStatus(hash, attempts + 1), pollInterval);
+      }
+    } catch (error) {
+      console.error('Error polling image status:', error);
+      // Continue polling on error
+      setTimeout(() => pollImageStatus(hash, attempts + 1), pollInterval);
     }
   };
 

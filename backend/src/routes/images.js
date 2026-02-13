@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const db = require('../config/database');
 const imageService = require('../services/imageService');
+const { imageQueue } = require('../queue/imageQueue');
 const { logger } = require('../utils/logger');
 
 // Placeholder image path (fallback when image fails to load)
@@ -38,8 +40,9 @@ router.get('/health', async (req, res) => {
 
 /**
  * POST /api/images/:hash/regenerate
- * Regenerate an image with a new seed
- * Updates the scene record with the new image hash
+ * Regenerate an image asynchronously
+ * Queues the job and returns immediately with the new hash
+ * Frontend should poll for status updates
  */
 router.post('/:hash/regenerate', async (req, res) => {
   const { hash } = req.params;
@@ -50,37 +53,107 @@ router.post('/:hash/regenerate', async (req, res) => {
       return res.status(400).json({ error: 'Cannot regenerate fallback image' });
     }
 
+    // Get the old image metadata
+    const oldImage = await db.get('SELECT * FROM images WHERE hash = ?', [hash]);
+    if (!oldImage) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    // Generate a new hash for the regenerated image
+    const newHash = crypto.randomBytes(16).toString('hex');
+
     // Find the scene using this image hash
     const scene = await imageService.findSceneByImageHash(hash);
 
-    // Regenerate the image
-    const result = await imageService.regenerateImage(hash);
+    // Create new image record with pending status
+    await db.run(`
+      INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+      VALUES (?, ?, '', ?, ?, 'pending', 'queue')
+    `, [newHash, oldImage.prompt, oldImage.width || 1024, oldImage.height || 1024]);
 
-    if (result.success) {
-      // Update the scene with the new hash if scene was found
-      if (scene) {
-        await imageService.updateSceneImageHash(scene.id, result.newHash);
-      }
-
-      return res.json({
-        success: true,
-        message: 'Image regenerated successfully',
-        oldHash: result.oldHash,
-        newHash: result.newHash,
-        newUrl: result.newUrl,
-        sceneId: scene?.id
-      });
-    } else {
-      return res.status(500).json({
-        error: 'Failed to regenerate image',
-        details: result.error
-      });
+    // Update the scene with the new hash immediately (will show placeholder)
+    if (scene) {
+      await imageService.updateSceneImageHash(scene.id, newHash);
     }
+
+    // Delete the old image record and file
+    await imageService.deleteImage(hash);
+
+    // Add the regeneration job to the queue
+    imageQueue.addJob({
+      hash: newHash,
+      prompt: oldImage.prompt,
+      type: 'regenerate',
+      adventureId: scene?.adventure_id || null,
+      entityId: scene?.id || null,
+      options: {
+        width: oldImage.width || 1024,
+        height: oldImage.height || 1024,
+        style: 'fantasy art'
+      }
+    });
+
+    logger.info('Image regeneration queued', {
+      oldHash: hash,
+      newHash,
+      sceneId: scene?.id
+    });
+
+    // Return immediately - frontend will poll for status
+    return res.json({
+      success: true,
+      message: 'Image regeneration started',
+      oldHash: hash,
+      newHash,
+      newUrl: `/api/images/${newHash}`,
+      status: 'pending',
+      sceneId: scene?.id
+    });
+
   } catch (error) {
-    logger.error('Error regenerating image', { hash, error: error.message });
+    logger.error('Error queueing image regeneration', { hash, error: error.message });
     return res.status(500).json({
       error: 'Failed to regenerate image',
       details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/images/:hash/status
+ * Get the status of an image (for polling)
+ */
+router.get('/:hash/status', async (req, res) => {
+  const { hash } = req.params;
+
+  try {
+    const image = await db.get(`
+      SELECT hash, status, cached_path, provider, error_message
+      FROM images WHERE hash = ?
+    `, [hash]);
+
+    if (!image) {
+      return res.status(404).json({
+        hash,
+        status: 'not_found',
+        error: 'Image not found'
+      });
+    }
+
+    return res.json({
+      hash: image.hash,
+      status: image.status,
+      provider: image.provider,
+      error: image.error_message,
+      url: image.status === 'ready' ? `/api/images/${image.hash}` : null
+    });
+
+  } catch (error) {
+    logger.error('Error getting image status', { hash, error: error.message });
+    return res.status(500).json({
+      hash,
+      status: 'error',
+      error: error.message
     });
   }
 });

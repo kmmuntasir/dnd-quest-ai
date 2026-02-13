@@ -208,12 +208,11 @@ export const settingsAPI = {
 
 /**
  * Images API
- * Note: regenerate uses longer timeout since image generation can take up to 2 minutes
+ * Regenerate is now async - returns immediately and frontend polls for status
  */
 export const imagesAPI = {
-  regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`, {}, {
-    timeout: 180000 // 3 minutes - Flux/SDXL can take up to 2 minutes
-  })
+  regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`),
+  getStatus: (hash) => api.get(`/api/images/${hash}/status`)
 };
 
 /**
