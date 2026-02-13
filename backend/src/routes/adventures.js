@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/database');
 const groqService = require('../services/groqService');
 const imageService = require('../services/imageService');
+const { imageQueue } = require('../queue/imageQueue');
 const { aiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
 const { requireAuth, optionalAuth } = require('../middleware/auth');
@@ -60,6 +61,12 @@ router.post('/generate-context', aiLimiter, validate(generateContextSchema), asy
 /**
  * POST /api/adventures/generate
  * Generate a new adventure
+ *
+ * Flow:
+ * 1. Generate story using Groq (sync, ~10s)
+ * 2. Create adventure with status='pending'
+ * 3. Queue image generation jobs (background)
+ * 4. Return adventure immediately
  */
 router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchema), async (req, res) => {
   try {
@@ -76,8 +83,6 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
       context
     });
 
-    logger.info('Adventure generated. Generating images...');
-
     // Validate that we have enough scenes
     const sceneCount = adventure.scenes?.length || 0;
     if (sceneCount < 2) {
@@ -85,36 +90,51 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
     } else {
       logger.info(`Generated ${sceneCount} scenes for adventure`);
     }
-    const scenesWithImages = await imageService.generateSceneImages(
-      adventure.scenes,
-      'fantasy art'
-    );
 
-    // Generate NPC portraits
-    const npcsWithImages = await Promise.all(
-      adventure.npcs.map(async (npc) => {
-        const { hash, url } = await imageService.generateNPCPortrait(npc, 'fantasy art');
-        return {
-          ...npc,
-          image_url: url,
-          portrait_hash: hash
-        };
-      })
-    );
+    // Calculate total images needed
+    const totalImages = sceneCount + (adventure.npcs?.length || 0);
 
-    // Insert adventure, scenes, and NPCs in a transaction for data integrity
+    // Generate image hashes (without fetching images)
+    const scenesWithHashes = adventure.scenes.map(scene => {
+      const hash = imageService.generateImageHash();
+      return {
+        ...scene,
+        image_hash: hash,
+        image_url: `/api/images/${hash}`
+      };
+    });
+
+    const npcsWithHashes = adventure.npcs.map(npc => {
+      const hash = imageService.generateImageHash();
+      return {
+        ...npc,
+        portrait_hash: hash,
+        image_url: `/api/images/${hash}`
+      };
+    });
+
+    // Insert adventure, scenes, and NPCs in a transaction
     const adventureId = await db.transaction(async (txn) => {
-      // Insert adventure into database
+      // Insert adventure with status='pending' (or 'ready' if no images)
       const adventureResult = await txn.run(`
-        INSERT INTO adventures (title, description, setting, quest, difficulty, user_id, generated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `, [adventure.title, adventure.description, adventure.setting, adventure.quest, difficulty, userId]);
+        INSERT INTO adventures (title, description, setting, quest, difficulty, user_id, generated_at, status, images_total, images_ready, images_failed)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, 0, 0)
+      `, [
+        adventure.title,
+        adventure.description,
+        adventure.setting,
+        adventure.quest,
+        difficulty,
+        userId,
+        totalImages > 0 ? 'pending' : 'ready',
+        totalImages
+      ]);
 
       const newAdventureId = adventureResult.lastID;
 
       // Insert scenes with image_hash
-      for (let i = 0; i < scenesWithImages.length; i++) {
-        const scene = scenesWithImages[i];
+      for (let i = 0; i < scenesWithHashes.length; i++) {
+        const scene = scenesWithHashes[i];
         await txn.run(`
           INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
           VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -127,20 +147,66 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
           JSON.stringify(scene.choices),
           scene.isKeyScene ? 1 : 0
         ]);
+
+        // Insert image metadata with pending status
+        await txn.run(`
+          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+          VALUES (?, ?, '', 1024, 1024, 'pending', 'queued')
+        `, [scene.image_hash, scene.imagePrompt]);
       }
 
       // Insert NPCs with portrait_hash
-      for (const npc of npcsWithImages) {
+      for (const npc of npcsWithHashes) {
         await txn.run(`
           INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
           VALUES (?, ?, ?, ?, ?, ?)
         `, [newAdventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
+
+        // Insert image metadata with pending status
+        const portraitPrompt = `Portrait of ${npc.name}, ${npc.description}, ${npc.role}, character design, fantasy art style`;
+        await txn.run(`
+          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+          VALUES (?, ?, '', 512, 512, 'pending', 'queued')
+        `, [npc.portrait_hash, portraitPrompt]);
       }
 
       return newAdventureId;
     });
 
-    logger.info('Adventure saved', { adventureId });
+    logger.info('Adventure saved, queueing image generation', { adventureId, totalImages });
+
+    // Queue image generation jobs
+    const imageJobs = [];
+
+    for (let i = 0; i < scenesWithHashes.length; i++) {
+      const scene = scenesWithHashes[i];
+      imageJobs.push({
+        hash: scene.image_hash,
+        prompt: scene.imagePrompt,
+        type: 'scene',
+        adventureId,
+        entityId: i + 1, // scene order (will be scene_id after insert)
+        options: { style: 'fantasy art', width: 1024, height: 1024 }
+      });
+    }
+
+    for (let i = 0; i < npcsWithHashes.length; i++) {
+      const npc = npcsWithHashes[i];
+      const portraitPrompt = `Portrait of ${npc.name}, ${npc.description}, ${npc.role}, character design, fantasy art style`;
+      imageJobs.push({
+        hash: npc.portrait_hash,
+        prompt: portraitPrompt,
+        type: 'npc',
+        adventureId,
+        entityId: i + 1,
+        options: { style: 'fantasy art', width: 512, height: 512 }
+      });
+    }
+
+    // Add all jobs to the queue
+    if (imageJobs.length > 0) {
+      imageQueue.addJobs(imageJobs);
+    }
 
     res.json({
       adventureId,
@@ -149,11 +215,22 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
       setting: adventure.setting,
       quest: adventure.quest,
       difficulty,
-      scenes: scenesWithImages.map((s, i) => ({
+      status: totalImages > 0 ? 'pending' : 'ready',
+      imagesTotal: totalImages,
+      imagesReady: 0,
+      scenes: scenesWithHashes.map((s, i) => ({
         id: i + 1,
-        ...s
+        description: s.description,
+        choices: s.choices,
+        isKeyScene: s.isKeyScene,
+        image_url: s.image_url
       })),
-      npcs: npcsWithImages
+      npcs: npcsWithHashes.map(n => ({
+        name: n.name,
+        description: n.description,
+        role: n.role,
+        image_url: n.image_url
+      }))
     });
   } catch (error) {
     logger.error('Error generating adventure', { error: error.message });
@@ -192,15 +269,104 @@ router.get('/:id', validate(adventureIdSchema, 'params'), async (req, res) => {
     // Get NPCs
     const npcs = await db.all('SELECT * FROM npcs WHERE adventure_id = ?', [id]);
 
+    // Get image status for all images
+    const imageHashes = [
+      ...scenes.map(s => s.image_hash).filter(Boolean),
+      ...npcs.map(n => n.portrait_hash).filter(Boolean)
+    ];
+
+    let imageStatuses = {};
+    if (imageHashes.length > 0) {
+      const placeholders = imageHashes.map(() => '?').join(',');
+      const images = await db.all(
+        `SELECT hash, status FROM images WHERE hash IN (${placeholders})`,
+        imageHashes
+      );
+      imageStatuses = Object.fromEntries(images.map(img => [img.hash, img.status]));
+    }
+
+    // Add image status to scenes and NPCs
+    const scenesWithImageStatus = scenesWithParsedChoices.map(scene => ({
+      ...scene,
+      image_status: scene.image_hash ? (imageStatuses[scene.image_hash] || 'unknown') : null
+    }));
+
+    const npcsWithImageStatus = npcs.map(npc => ({
+      ...npc,
+      image_status: npc.portrait_hash ? (imageStatuses[npc.portrait_hash] || 'unknown') : null
+    }));
+
     res.json({
       ...adventure,
-      scenes: scenesWithParsedChoices,
-      npcs
+      scenes: scenesWithImageStatus,
+      npcs: npcsWithImageStatus
     });
   } catch (error) {
     logger.error('Error fetching adventure', { error: error.message });
     res.status(500).json({
       error: 'Failed to fetch adventure',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/adventures/:id/status
+ * Get adventure image generation status
+ */
+router.get('/:id/status', validate(adventureIdSchema, 'params'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get adventure status
+    const adventure = await db.get(`
+      SELECT id, status, images_total, images_ready, images_failed
+      FROM adventures WHERE id = ?
+    `, [id]);
+
+    if (!adventure) {
+      return res.status(404).json({ error: 'Adventure not found' });
+    }
+
+    // Also get queue progress for real-time updates
+    const queueProgress = imageQueue.getAdventureProgress(parseInt(id));
+
+    // Get detailed image status
+    const images = await db.all(`
+      SELECT i.hash, i.status, i.provider, s.scene_order, n.name as npc_name
+      FROM images i
+      LEFT JOIN scenes s ON s.image_hash = i.hash AND s.adventure_id = ?
+      LEFT JOIN npcs n ON n.portrait_hash = i.hash AND n.adventure_id = ?
+      WHERE i.hash IN (
+        SELECT image_hash FROM scenes WHERE adventure_id = ? AND image_hash IS NOT NULL
+        UNION
+        SELECT portrait_hash FROM npcs WHERE adventure_id = ? AND portrait_hash IS NOT NULL
+      )
+    `, [id, id, id, id]);
+
+    res.json({
+      adventureId: parseInt(id),
+      status: adventure.status,
+      total: adventure.images_total,
+      ready: adventure.images_ready,
+      failed: adventure.images_failed,
+      pending: (adventure.images_total || 0) - (adventure.images_ready || 0) - (adventure.images_failed || 0),
+      progress: adventure.images_total > 0
+        ? Math.round((adventure.images_ready / adventure.images_total) * 100)
+        : 100,
+      queue: queueProgress,
+      images: images.map(img => ({
+        hash: img.hash,
+        status: img.status,
+        provider: img.provider,
+        type: img.npc_name ? 'npc' : 'scene',
+        name: img.npc_name || `Scene ${img.scene_order + 1}`
+      }))
+    });
+  } catch (error) {
+    logger.error('Error fetching adventure status', { error: error.message });
+    res.status(500).json({
+      error: 'Failed to fetch adventure status',
       details: error.message
     });
   }

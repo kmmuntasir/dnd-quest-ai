@@ -164,7 +164,8 @@ class AIHordeProvider extends ImageProvider {
   }
 
   /**
-   * Generate image and return hash
+   * Generate image and return hash (lazy loading - doesn't fetch the image)
+   * Note: For AI Horde, this still generates the image but doesn't download it
    * @param {string} prompt - Image generation prompt
    * @param {Object} options - Additional options
    * @param {string} options.style - Image style (default: 'fantasy art')
@@ -224,6 +225,72 @@ class AIHordeProvider extends ImageProvider {
         url: `/api/images/${fallbackHash}`
       };
     }
+  }
+
+  /**
+   * Generate image AND fetch it immediately (for eager loading/queue)
+   * This is the preferred method for the queue system
+   * @param {string} prompt - Image generation prompt
+   * @param {Object} options - Additional options
+   * @returns {Promise<{hash: string, url: string, file_path: string}>}
+   */
+  async generateAndFetch(prompt, options = {}) {
+    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight } = options;
+
+    // Enhance prompt with style keywords
+    const enhancedPrompt = this.enhancePrompt(prompt, style);
+
+    return this.executeWithProtection(async () => {
+      // Generate unique hash for this image
+      const hash = this.generateHash();
+
+      // Store metadata with processing status first
+      const db = require('../../config/database');
+      await db.run(`
+        INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+        VALUES (?, ?, '', ?, ?, 'processing', 'aihorde')
+      `, [hash, enhancedPrompt, width, height]);
+
+      logger.info('Generating and fetching image', { hash, provider: 'aihorde' });
+
+      // Submit generation request
+      const requestId = await this.submitGenerationRequest(enhancedPrompt, { width, height });
+
+      // Wait for completion
+      const generation = await this.waitForGeneration(requestId);
+      const imageUrl = generation.img;
+
+      // Update with actual URL
+      await db.run(`
+        UPDATE images SET pollinations_url = ? WHERE hash = ?
+      `, [imageUrl, hash]);
+
+      // Download the image immediately
+      logger.info('Downloading image from AI Horde', { hash });
+      const response = await axios.get(imageUrl, {
+        timeout: this.timeout,
+        responseType: 'arraybuffer'
+      });
+
+      if (response.status !== 200 || response.data.byteLength === 0) {
+        throw new Error(`Failed to download image: status ${response.status}`);
+      }
+
+      // Save to cache
+      const file_path = this.saveToCache(hash, response.data);
+
+      // Update status to ready
+      await db.run(`
+        UPDATE images SET status = 'ready', cached_path = ? WHERE hash = ?
+      `, [file_path, hash]);
+
+      return {
+        hash,
+        url: `/api/images/${hash}`,
+        file_path,
+        provider: 'aihorde'
+      };
+    });
   }
 
   /**

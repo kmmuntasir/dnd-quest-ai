@@ -3,6 +3,7 @@
  * Delegates to the provider system while maintaining backward compatibility
  */
 
+const crypto = require('crypto');
 const { logger } = require('../utils/logger');
 const {
   getImageProvider,
@@ -29,6 +30,14 @@ function init() {
 
 // Initialize on module load
 init();
+
+/**
+ * Generate a random image hash (for queueing)
+ * @returns {string} 32-character hex hash
+ */
+function generateImageHash() {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 /**
  * Generate image and return hash
@@ -338,6 +347,7 @@ async function getProviderHealth() {
 
 module.exports = {
   generateImage,
+  generateImageHash,
   generateSceneImages,
   generateNPCPortrait,
   getCachedImage,

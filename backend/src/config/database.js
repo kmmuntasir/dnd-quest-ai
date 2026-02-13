@@ -403,6 +403,41 @@ async function runMigrations() {
           -- Rename new table
           ALTER TABLE settings_new RENAME TO settings;
         `
+      },
+      {
+        version: 7,
+        name: 'add_status_to_adventures',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(adventures)");
+          return !info.some(col => col.name === 'status');
+        },
+        up: `ALTER TABLE adventures ADD COLUMN status TEXT DEFAULT 'ready'`
+      },
+      {
+        version: 8,
+        name: 'add_image_generation_fields',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(adventures)");
+          return !info.some(col => col.name === 'images_total');
+        },
+        up: `
+          ALTER TABLE adventures ADD COLUMN images_total INTEGER DEFAULT 0;
+          ALTER TABLE adventures ADD COLUMN images_ready INTEGER DEFAULT 0;
+          ALTER TABLE adventures ADD COLUMN images_failed INTEGER DEFAULT 0
+        `
+      },
+      {
+        version: 9,
+        name: 'update_images_table_for_status',
+        check: async () => {
+          const info = await dbAsync.all("PRAGMA table_info(images)");
+          return !info.some(col => col.name === 'status');
+        },
+        up: `
+          ALTER TABLE images ADD COLUMN status TEXT DEFAULT 'pending';
+          ALTER TABLE images ADD COLUMN provider TEXT DEFAULT 'pollinations';
+          ALTER TABLE images ADD COLUMN error_message TEXT
+        `
       }
     ];
 

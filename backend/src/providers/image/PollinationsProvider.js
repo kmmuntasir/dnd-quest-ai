@@ -59,7 +59,7 @@ class PollinationsProvider extends ImageProvider {
   }
 
   /**
-   * Generate image and return hash
+   * Generate image and return hash (lazy loading - doesn't fetch the image)
    * @param {string} prompt - Image generation prompt
    * @param {Object} options - Additional options
    * @param {string} options.style - Image style (default: 'fantasy art')
@@ -83,13 +83,15 @@ class PollinationsProvider extends ImageProvider {
       // Build Pollinations URL
       const pollinationsUrl = this.buildPollinationsUrl(enhancedPrompt, width, height, seed);
 
-      // Store metadata in database
-      await this.storeImageMetadata({
+      // Store metadata in database with pending status
+      await this._storeImageMetadataWithStatus({
         hash,
         prompt: enhancedPrompt,
         providerUrl: pollinationsUrl,
         width,
-        height
+        height,
+        status: 'pending',
+        provider: 'pollinations'
       });
 
       // Return hash - the /api/images/:hash endpoint will handle serving
@@ -106,6 +108,76 @@ class PollinationsProvider extends ImageProvider {
         hash: fallbackHash,
         url: `/api/images/${fallbackHash}`
       };
+    }
+  }
+
+  /**
+   * Generate image AND fetch it immediately (for eager loading/queue)
+   * @param {string} prompt - Image generation prompt
+   * @param {Object} options - Additional options
+   * @returns {Promise<{hash: string, url: string, file_path: string}>}
+   */
+  async generateAndFetch(prompt, options = {}) {
+    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight } = options;
+
+    // Enhance prompt with style keywords
+    const enhancedPrompt = this.enhancePrompt(prompt, style);
+
+    return this.executeWithProtection(async () => {
+      // Generate unique hash for this image
+      const hash = this.generateHash();
+
+      // Generate seed based on hash for reproducibility
+      const seed = parseInt(hash.substring(0, 8), 16) % 1000000;
+
+      // Build Pollinations URL
+      const pollinationsUrl = this.buildPollinationsUrl(enhancedPrompt, width, height, seed);
+
+      // Store metadata in database with processing status
+      await this._storeImageMetadataWithStatus({
+        hash,
+        prompt: enhancedPrompt,
+        providerUrl: pollinationsUrl,
+        width,
+        height,
+        status: 'processing',
+        provider: 'pollinations'
+      });
+
+      logger.info('Generating and fetching image', { hash, provider: 'pollinations' });
+
+      // Fetch the image immediately
+      const file_path = await this._fetchFromUrl(pollinationsUrl, hash);
+
+      // Update status to ready
+      const db = require('../../config/database');
+      await db.run(`
+        UPDATE images SET status = 'ready', cached_path = ? WHERE hash = ?
+      `, [file_path, hash]);
+
+      return {
+        hash,
+        url: `/api/images/${hash}`,
+        file_path,
+        provider: 'pollinations'
+      };
+    });
+  }
+
+  /**
+   * Store image metadata with status (for queue system)
+   * @private
+   */
+  async _storeImageMetadataWithStatus({ hash, prompt, providerUrl, width, height, status, provider }) {
+    const db = require('../../config/database');
+    try {
+      await db.run(`
+        INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [hash, prompt, providerUrl, width, height, status, provider]);
+    } catch (error) {
+      logger.error('Failed to store image metadata', { hash, error: error.message });
+      throw error;
     }
   }
 
