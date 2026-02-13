@@ -227,10 +227,17 @@ export function Gallery() {
         setImageStatus(prev => ({ ...prev, [hash]: 'ready' }));
         setRegenerating(false);
         // Force image reload by updating the URL with timestamp
+        const newUrl = `/api/images/${hash}?t=${Date.now()}`;
         setSelectedScene(prev => ({
           ...prev,
-          image_url: `/api/images/${hash}?t=${Date.now()}`
+          image_url: newUrl
         }));
+        // Also update the thumbnail in the scenes array
+        setScenes(prev => prev.map(scene =>
+          scene.image_hash === hash
+            ? { ...scene, image_url: newUrl }
+            : scene
+        ));
       } else if (data.status === 'failed') {
         setImageStatus(prev => ({ ...prev, [hash]: 'failed' }));
         setRegenerating(false);
