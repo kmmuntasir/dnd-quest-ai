@@ -127,10 +127,17 @@ api.post = (url, data, config = {}) => {
     '/api/settings/ai/test'
   ];
 
-  const shouldDedupe = deduplicatablePosts.some(ep => url === ep);
+  // Also deduplicate regenerate requests (pattern match)
+  const isRegenerateRequest = url.includes('/regenerate');
+
+  const shouldDedupe = deduplicatablePosts.some(ep => url === ep) || isRegenerateRequest;
 
   if (shouldDedupe) {
-    const requestKey = `post:${url}:${JSON.stringify(data)}:`;
+    // For regenerate requests, use the URL as the key (includes hash)
+    // For other requests, include the data in the key
+    const requestKey = isRegenerateRequest
+      ? `post:${url}`
+      : `post:${url}:${JSON.stringify(data)}:`;
 
     if (pendingRequests.has(requestKey)) {
       return pendingRequests.get(requestKey);
@@ -201,9 +208,12 @@ export const settingsAPI = {
 
 /**
  * Images API
+ * Note: regenerate uses longer timeout since image generation can take up to 2 minutes
  */
 export const imagesAPI = {
-  regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`)
+  regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`, {}, {
+    timeout: 180000 // 3 minutes - Flux/SDXL can take up to 2 minutes
+  })
 };
 
 /**
