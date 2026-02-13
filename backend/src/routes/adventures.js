@@ -132,9 +132,17 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
 
       const newAdventureId = adventureResult.lastID;
 
-      // Insert scenes with image_hash
+      // Insert scenes with image_hash (insert image metadata first due to foreign key)
       for (let i = 0; i < scenesWithHashes.length; i++) {
         const scene = scenesWithHashes[i];
+
+        // Insert image metadata with pending status FIRST (foreign key requirement)
+        await txn.run(`
+          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+          VALUES (?, ?, '', 1024, 1024, 'pending', 'queued')
+        `, [scene.image_hash, scene.imagePrompt]);
+
+        // Then insert the scene
         await txn.run(`
           INSERT INTO scenes (adventure_id, scene_order, description, image_url, image_hash, choices, is_key_scene)
           VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -147,27 +155,22 @@ router.post('/generate', requireAuth, aiLimiter, validate(generateAdventureSchem
           JSON.stringify(scene.choices),
           scene.isKeyScene ? 1 : 0
         ]);
-
-        // Insert image metadata with pending status
-        await txn.run(`
-          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
-          VALUES (?, ?, '', 1024, 1024, 'pending', 'queued')
-        `, [scene.image_hash, scene.imagePrompt]);
       }
 
-      // Insert NPCs with portrait_hash
+      // Insert NPCs with portrait_hash (insert image metadata first due to foreign key)
       for (const npc of npcsWithHashes) {
-        await txn.run(`
-          INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [newAdventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
-
-        // Insert image metadata with pending status
+        // Insert image metadata with pending status FIRST (foreign key requirement)
         const portraitPrompt = `Portrait of ${npc.name}, ${npc.description}, ${npc.role}, character design, fantasy art style`;
         await txn.run(`
           INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
           VALUES (?, ?, '', 512, 512, 'pending', 'queued')
         `, [npc.portrait_hash, portraitPrompt]);
+
+        // Then insert the NPC
+        await txn.run(`
+          INSERT INTO npcs (adventure_id, name, description, role, image_url, portrait_hash)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `, [newAdventureId, npc.name, npc.description, npc.role, npc.image_url, npc.portrait_hash]);
       }
 
       return newAdventureId;
