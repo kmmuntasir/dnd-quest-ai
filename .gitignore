@@ -45,6 +45,9 @@ tmp/
 # Screenshots
 screenshot/
 
+# Playwright MCP
+.playwright-mcp
+
 # Backend storage (cached images)
 backend/storage/
 backend/.husky

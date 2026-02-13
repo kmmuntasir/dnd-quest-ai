@@ -9,6 +9,33 @@ const { logger } = require('../utils/logger');
 const PLACEHOLDER_IMAGE = path.resolve(__dirname, '../../storage/placeholder.png');
 
 /**
+ * GET /api/images/health
+ * Check the health of the image generation service
+ */
+router.get('/health', async (req, res) => {
+  try {
+    const serviceStatus = imageService.getServiceStatus();
+    const isConnected = await imageService.testConnection();
+
+    res.json({
+      status: isConnected ? 'healthy' : 'unhealthy',
+      serviceDown: serviceStatus.isDown,
+      lastDetected: serviceStatus.lastDetected,
+      message: isConnected
+        ? 'Image generation service is available'
+        : 'Image generation service is temporarily unavailable. Please try again later.'
+    });
+  } catch (error) {
+    logger.error('Error checking image service health', { error: error.message });
+    res.status(503).json({
+      status: 'error',
+      message: 'Failed to check image service health',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /api/images/:hash/regenerate
  * Regenerate an image with a new seed
  * Updates the scene record with the new image hash
@@ -62,6 +89,7 @@ router.post('/:hash/regenerate', async (req, res) => {
  * Serve an image by its hash
  * - If cached: serve from filesystem
  * - If not cached: fetch from Pollinations, cache, then serve
+ * - If Pollinations unavailable: serve placeholder
  */
 router.get('/:hash', async (req, res) => {
   const { hash } = req.params;
@@ -72,6 +100,13 @@ router.get('/:hash', async (req, res) => {
       return servePlaceholder(res, 'Fallback image');
     }
 
+    // Check if service is known to be down
+    const serviceStatus = imageService.getServiceStatus();
+    if (serviceStatus.isDown) {
+      logger.warn('Image service is down, serving placeholder', { hash });
+      return servePlaceholder(res, 'Service temporarily unavailable', true);
+    }
+
     // Get cached image or fetch if not cached
     const cachedPath = await imageService.getCachedImage(hash);
 
@@ -80,16 +115,16 @@ router.get('/:hash', async (req, res) => {
       return serveImage(res, cachedPath);
     }
 
-    // If caching failed, try to get metadata and redirect to original URL
-    const metadata = await imageService.getImageMetadata(hash);
-
-    if (metadata && metadata.pollinations_url) {
-      // Redirect to Pollinations URL as fallback
-      return res.redirect(metadata.pollinations_url);
+    // Check again if service was marked down during fetch
+    const updatedStatus = imageService.getServiceStatus();
+    if (updatedStatus.isDown) {
+      logger.warn('Image service detected as down during fetch', { hash });
+      return servePlaceholder(res, 'Service temporarily unavailable', true);
     }
 
-    // No image found, serve placeholder
-    return servePlaceholder(res, 'Image not found');
+    // If caching failed (likely Pollinations unavailable), serve placeholder
+    logger.warn('Image not cached, serving placeholder', { hash });
+    return servePlaceholder(res, 'Image loading...');
 
   } catch (error) {
     logger.error('Error serving image', { hash, error: error.message });
@@ -128,28 +163,47 @@ function serveImage(res, imagePath) {
  * Serve a placeholder image
  * @param {Response} res - Express response object
  * @param {string} reason - Reason for showing placeholder
+ * @param {boolean} isServiceDown - Whether the image service is unavailable
  */
-function servePlaceholder(res, reason) {
+function servePlaceholder(res, reason, isServiceDown = false) {
   // Check if placeholder exists
-  if (fs.existsSync(PLACEHOLDER_IMAGE)) {
+  if (fs.existsSync(PLACEHOLDER_IMAGE) && !isServiceDown) {
     return serveImage(res, PLACEHOLDER_IMAGE);
   }
 
   // Generate a simple SVG placeholder
+  const mainText = isServiceDown ? 'Image Service Unavailable' : 'Image Loading...';
+  const subText = isServiceDown
+    ? 'Please try refreshing or regenerating the image'
+    : reason;
+
   const svg = `
     <svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="#4a1c6b"/>
-      <text x="50%" y="50%" font-family="Arial" font-size="32" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">
-        Image Unavailable
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#4a1c6b;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#2d1b4e;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grad)"/>
+      <text x="50%" y="45%" font-family="Arial" font-size="28" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">
+        ${mainText}
       </text>
-      <text x="50%" y="60%" font-family="Arial" font-size="18" fill="#888888" text-anchor="middle" dominant-baseline="middle">
-        ${reason}
+      <text x="50%" y="55%" font-family="Arial" font-size="16" fill="#aaaaaa" text-anchor="middle" dominant-baseline="middle">
+        ${subText}
       </text>
+      ${isServiceDown ? `
+      <rect x="40%" y="65%" width="20%" height="8%" rx="5" fill="#7c3aed"/>
+      <text x="50%" y="69%" font-family="Arial" font-size="14" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">
+        Click to Retry
+      </text>
+      ` : ''}
     </svg>
   `;
 
   res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+  // Cache for shorter time if service is down to allow quick retry
+  res.setHeader('Cache-Control', isServiceDown ? 'public, max-age=10' : 'public, max-age=60');
   res.send(svg);
 }
 

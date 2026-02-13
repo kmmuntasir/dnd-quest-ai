@@ -72,10 +72,19 @@ function buildPollinationsUrl(prompt, width, height, seed) {
  * @param {number} height - Image height
  */
 async function storeImageMetadata(hash, prompt, pollinationsUrl, width, height) {
-  await db.run(`
-    INSERT OR IGNORE INTO images (hash, prompt, pollinations_url, width, height)
-    VALUES (?, ?, ?, ?, ?)
-  `, [hash, prompt, pollinationsUrl, width, height]);
+  try {
+    const result = await db.run(`
+      INSERT INTO images (hash, prompt, pollinations_url, width, height)
+      VALUES (?, ?, ?, ?, ?)
+    `, [hash, prompt, pollinationsUrl, width, height]);
+
+    if (result.changes === 0) {
+      logger.warn('Image metadata not inserted - hash may already exist', { hash });
+    }
+  } catch (error) {
+    logger.error('Failed to store image metadata', { hash, error: error.message });
+    throw error; // Re-throw to let caller handle it
+  }
 }
 
 /**
@@ -142,6 +151,47 @@ async function generateImage(prompt, options = {}) {
   }
 }
 
+// Track if service is currently down (530/5xx errors)
+let serviceDownDetected = false;
+let serviceDownTime = null;
+
+/**
+ * Check if the image service is currently detected as down
+ * @returns {Object} Status object with isDown and lastDetected properties
+ */
+function getServiceStatus() {
+  // Auto-recover after 5 minutes
+  if (serviceDownDetected && serviceDownTime && (Date.now() - serviceDownTime > 300000)) {
+    serviceDownDetected = false;
+    serviceDownTime = null;
+    logger.info('Image service auto-recovery triggered');
+  }
+  return {
+    isDown: serviceDownDetected,
+    lastDetected: serviceDownTime
+  };
+}
+
+/**
+ * Mark service as down
+ */
+function markServiceDown() {
+  serviceDownDetected = true;
+  serviceDownTime = Date.now();
+  logger.warn('Image service marked as down', { serviceDownTime });
+}
+
+/**
+ * Mark service as up (after successful fetch)
+ */
+function markServiceUp() {
+  if (serviceDownDetected) {
+    logger.info('Image service recovered');
+  }
+  serviceDownDetected = false;
+  serviceDownTime = null;
+}
+
 /**
  * Fetch and cache an image from Pollinations.ai
  * Uses circuit breaker and retry logic for reliability
@@ -174,7 +224,7 @@ async function fetchAndCacheImage(hash) {
         maxRetries: MAX_RETRIES,
         baseDelay: RETRY_BASE_DELAY,
         shouldRetry: (error) => {
-          // Retry on network errors or 5xx responses
+          // Retry on network errors or 5xx responses (including 530)
           return !error.response || error.response.status >= 500;
         }
       }
@@ -182,6 +232,7 @@ async function fetchAndCacheImage(hash) {
 
     // Update circuit breaker on success
     pollinationsCircuitBreaker.recordSuccess();
+    markServiceUp();
 
     // Update database with cached path
     if (cachedPath) {
@@ -193,9 +244,15 @@ async function fetchAndCacheImage(hash) {
     // Update circuit breaker on failure
     pollinationsCircuitBreaker.recordFailure();
 
+    // Detect if it's a service-down error (530, 502, 503)
+    if (error.response && (error.response.status === 530 || error.response.status === 502 || error.response.status === 503)) {
+      markServiceDown();
+    }
+
     logger.error('Failed to fetch image after retries', {
       hash,
       error: error.message,
+      statusCode: error.response?.status,
       circuitState: pollinationsCircuitBreaker.getState().state
     });
     return null;
@@ -351,6 +408,7 @@ async function deleteAdventureImages(adventureId) {
 
 /**
  * Test Pollinations.ai API connection
+ * Uses a realistic prompt to verify the service is actually working
  * @returns {Promise<boolean>} True if connection successful
  */
 async function testConnection() {
@@ -358,6 +416,7 @@ async function testConnection() {
     const params = new URLSearchParams({
       width: '512',
       height: '512',
+      seed: Date.now().toString(), // Use timestamp for unique seed
       referrer: APP_REFERRER
     });
 
@@ -365,7 +424,8 @@ async function testConnection() {
       params.append('nologo', 'true');
     }
 
-    const testUrl = `https://image.pollinations.ai/prompt/test?${params.toString()}`;
+    // Use a realistic prompt similar to what the app generates
+    const testUrl = `https://image.pollinations.ai/prompt/fantasy%20landscape?${params.toString()}`;
 
     const headers = {};
     if (POLLINATIONS_API_KEY) {
@@ -378,9 +438,31 @@ async function testConnection() {
       responseType: 'arraybuffer'
     });
 
-    return response.status === 200 && response.data.byteLength > 0;
+    // Check for valid response with actual image data
+    const isValid = response.status === 200 && response.data.byteLength > 1000;
+
+    if (isValid) {
+      markServiceUp();
+    } else {
+      logger.warn('Pollinations test returned empty or small response', {
+        status: response.status,
+        size: response.data.byteLength
+      });
+      markServiceDown();
+    }
+
+    return isValid;
   } catch (error) {
-    logger.error('Pollinations.ai connection test failed', { error: error.message });
+    logger.error('Pollinations.ai connection test failed', {
+      error: error.message,
+      status: error.response?.status
+    });
+
+    // Mark service as down for 530/5xx errors
+    if (error.response && error.response.status >= 500) {
+      markServiceDown();
+    }
+
     return false;
   }
 }
@@ -502,5 +584,6 @@ module.exports = {
   testConnection,
   regenerateImage,
   updateSceneImageHash,
-  findSceneByImageHash
+  findSceneByImageHash,
+  getServiceStatus
 };

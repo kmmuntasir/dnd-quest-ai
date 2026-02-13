@@ -18,9 +18,10 @@ const themes = [
 
 const tones = [
   { value: 'serious', label: 'Serious' },
-  { value: 'humorous', label: 'Humorous' },
+  { value: 'lighthearted', label: 'Light-hearted' },
   { value: 'dark', label: 'Dark' },
-  { value: 'light', label: 'Light-hearted' }
+  { value: 'heroic', label: 'Heroic' },
+  { value: 'mysterious', label: 'Mysterious' }
 ];
 
 const difficulties = [
