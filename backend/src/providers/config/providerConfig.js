@@ -10,12 +10,12 @@ const { logger } = require('../../utils/logger');
  * Image Provider Configuration
  */
 const imageProviderConfig = {
-  // Primary provider to use (aihorde-flux is fast and high quality)
-  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde-flux',
+  // Primary provider to use (aihorde-sdxl for quality, aihorde-flux for speed)
+  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde-sdxl',
 
   // Fallback providers (comma-separated list)
-  // Falls back to SDXL (quality), then fast aihorde, then pollinations
-  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde-sdxl,aihorde,pollinations')
+  // Falls back to Flux (fast), then fast aihorde, then pollinations
+  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde-flux,aihorde,pollinations')
     .split(',')
     .map(p => p.trim())
     .filter(p => p),
