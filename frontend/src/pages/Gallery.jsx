@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, Maximize2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { Image, resolveImageUrl } from '../components/ui/Image';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { adventuresAPI, imagesAPI } from '../services/api';
 
 export function Gallery() {
   const { adventureId } = useParams();
@@ -27,9 +25,10 @@ export function Gallery() {
   const loadAdventure = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/adventures/${adventureId}`);
-      setAdventure(response.data);
-      setScenes(response.data.scenes || []);
+      const response = await adventuresAPI.getById(adventureId);
+      const data = response.data || response;
+      setAdventure(data);
+      setScenes(data.scenes || []);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load adventure:', error);
@@ -62,12 +61,13 @@ export function Gallery() {
 
     try {
       setRegenerating(true);
-      const response = await axios.post(`${API_BASE_URL.replace('/api', '')}/api/images/${selectedScene.image_hash}/regenerate`);
+      const response = await imagesAPI.regenerate(selectedScene.image_hash);
+      const data = response.data || response;
 
-      if (response.data.success) {
+      if (data.success) {
         // Update the scene with the new hash and URL
-        const newHash = response.data.newHash;
-        const newUrl = response.data.newUrl;
+        const newHash = data.newHash;
+        const newUrl = data.newUrl;
 
         // Update selected scene
         setSelectedScene(prev => ({
@@ -153,7 +153,7 @@ export function Gallery() {
                     {/* Expand icon on hover */}
                     <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <div className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
-                        <Maximize2 className="w-4 h-4 text-white" />
+                        <ChevronRight className="w-4 h-4 text-white" />
                       </div>
                     </div>
                   </div>

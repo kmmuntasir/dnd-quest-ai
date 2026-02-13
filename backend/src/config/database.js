@@ -371,6 +371,38 @@ async function runMigrations() {
           return !info.some(col => col.name === 'user_id');
         },
         up: 'ALTER TABLE settings ADD COLUMN user_id INTEGER REFERENCES users(id)'
+      },
+      {
+        version: 6,
+        name: 'fix_settings_table_for_per_user_settings',
+        check: async () => {
+          // Check if settings table has the restrictive CHECK constraint
+          const tableSql = await dbAsync.get(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='settings'"
+          );
+          // If the table has CHECK (id = 1), it needs migration
+          return tableSql && tableSql.sql && tableSql.sql.includes('CHECK (id = 1)');
+        },
+        up: `
+          -- Create new settings table without the restrictive CHECK constraint
+          CREATE TABLE settings_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image_style TEXT DEFAULT 'fantasy art',
+            difficulty TEXT DEFAULT 'medium',
+            dice_animations BOOLEAN DEFAULT 1,
+            user_id INTEGER REFERENCES users(id)
+          );
+
+          -- Copy existing data
+          INSERT INTO settings_new (id, image_style, difficulty, dice_animations, user_id)
+          SELECT id, image_style, difficulty, dice_animations, user_id FROM settings;
+
+          -- Drop old table
+          DROP TABLE settings;
+
+          -- Rename new table
+          ALTER TABLE settings_new RENAME TO settings;
+        `
       }
     ];
 

@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import React from 'react';
 import { clsx } from 'clsx';
-
-// Get API base URL for image requests
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_BASE_URL } from '../../config/api';
 
 /**
  * Resolve image URL - prepend API base URL for relative URLs
@@ -19,11 +17,10 @@ export function resolveImageUrl(src) {
   }
   // For relative URLs starting with /api, prepend the base host
   if (src.startsWith('/api/')) {
-    const baseUrl = API_BASE_URL.replace('/api', '');
-    return `${baseUrl}${src}`;
+    return `${API_BASE_URL}${src}`;
   }
-  // For other relative URLs, prepend the API base URL
-  return `${API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+  // For other relative URLs, prepend the API base URL with /api
+  return `${API_BASE_URL}/api${src.startsWith('/') ? '' : '/'}${src}`;
 }
 
 export function Image({ src, alt, className = '', fallback = null, ...props }) {

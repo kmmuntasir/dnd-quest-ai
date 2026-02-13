@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Swords, Heart, Coins, Backpack, Undo2, RefreshCw } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -30,6 +30,14 @@ export function Game() {
   const [goingBack, setGoingBack] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+
+  // Ref to track difficulty for setTimeout closures (avoids stale closure issue)
+  const difficultyRef = useRef(null);
+
+  // Keep difficulty ref in sync with game state
+  useEffect(() => {
+    difficultyRef.current = game?.adventure?.difficulty;
+  }, [game?.adventure?.difficulty]);
 
   const loadGame = useCallback(async () => {
     try {
@@ -137,7 +145,8 @@ export function Game() {
         diceRoll: diceValue
       });
 
-      const data = response.data;
+      // API interceptor returns response.data directly
+      const data = response.data || response;
 
       // Update narrative
       setNarrative(data.narrative);
@@ -171,7 +180,8 @@ export function Game() {
           setNarrative(null); // Clear narrative for new scene
           setTransitioning(false);
           // After moving to a new scene, we can go back (if not hard mode)
-          const isHardMode = game?.adventure?.difficulty === 'hard';
+          // Use ref to avoid stale closure
+          const isHardMode = difficultyRef.current === 'hard';
           setCanGoBack(!isHardMode);
         }, 2000);
       } else {

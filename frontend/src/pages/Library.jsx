@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { BookOpen, Trash2, Play, Heart, Coins, MapPin, Shield, Wand2, Sword, Users, Leaf, Plus, Image as ImageIcon, X, ChevronRight, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody } from '../components/ui/Card';
@@ -10,8 +9,7 @@ import { Image } from '../components/ui/Image';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 import { useToast } from '../components/ui/ToastContext';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { savedGamesAPI, adventuresAPI } from '../services/api';
 
 // Class icons mapping
 const classIcons = {
@@ -43,8 +41,8 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
   const loadGames = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/saved-games/adventures/${adventure.adventure_id}/games`);
-      setGames(response.data.data);
+      const response = await savedGamesAPI.getByAdventure(adventure.adventure_id);
+      setGames(response.data || response);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load games:', error);
@@ -78,14 +76,14 @@ function PlayHistoryModal({ adventure, onClose, onResume, onNewGame, onViewGalle
 
     try {
       if (type === 'game') {
-        await axios.delete(`${API_BASE_URL}/saved-games/${id}`);
+        await savedGamesAPI.delete(id);
         setGames(games.filter(g => g.id !== id));
         toast.success('Playthrough deleted');
         if (games.length === 1) {
           onClose();
         }
       } else if (type === 'adventure') {
-        await axios.delete(`${API_BASE_URL}/adventures/${id}`);
+        await adventuresAPI.delete(id);
         toast.success('Adventure deleted');
         onDeleteAdventure(id);
         onClose();
@@ -296,8 +294,8 @@ export function Library() {
   const loadAdventures = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/saved-games/adventures`);
-      setAdventures(response.data.data);
+      const response = await savedGamesAPI.getAdventures();
+      setAdventures(response.data || response);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load adventures:', error);

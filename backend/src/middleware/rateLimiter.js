@@ -99,14 +99,14 @@ const createUserLimiter = ({ windowMs = 15 * 60 * 1000, max = 10, name = 'user-l
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    // Use user ID if authenticated, otherwise fall back to IP
-    // Using req.ip as fallback (express-rate-limit handles IPv6 properly)
-    keyGenerator: (req) => {
+    // Use user ID if authenticated, otherwise let library handle IP (IPv6 safe)
+    keyGenerator: (req, res) => {
       if (req.user?.id) {
         return `user:${req.user.id}`;
       }
-      // Fall back to default behavior (uses req.ip with proper IPv6 handling)
-      return req.ip;
+      // Return undefined to use the library's default IP key generator
+      // This ensures proper IPv6 handling
+      return undefined;
     },
     message: {
       error: 'Too many requests',

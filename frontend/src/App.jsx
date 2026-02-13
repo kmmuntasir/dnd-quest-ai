@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { Layout } from './components/common/Layout';
 import { NotFound } from './components/common/NotFound';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LoadingPage } from './components/ui/LoadingSpinner';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Lazy load pages for code splitting
 const Home = lazy(() => import('./pages/Home'));
@@ -12,6 +13,8 @@ const Game = lazy(() => import('./pages/Game'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Gallery = lazy(() => import('./pages/Gallery'));
 const CharacterCreation = lazy(() => import('./components/game/CharacterCreation'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
 
 // Wrapper component for lazy-loaded routes with error boundary
 function LazyRoute({ children }) {
@@ -22,6 +25,40 @@ function LazyRoute({ children }) {
       </Suspense>
     </ErrorBoundary>
   );
+}
+
+/**
+ * Protected Route - requires authentication
+ */
+function ProtectedRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingPage message="Checking authentication..." />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <LazyRoute>{children}</LazyRoute>;
+}
+
+/**
+ * Public Route - redirects to library if already authenticated
+ */
+function PublicRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingPage message="Loading..." />;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/library" replace />;
+  }
+
+  return <LazyRoute>{children}</LazyRoute>;
 }
 
 const router = createBrowserRouter([
@@ -46,27 +83,43 @@ const router = createBrowserRouter([
         )
       },
       {
+        path: 'login',
+        element: (
+          <PublicRoute>
+            <Login />
+          </PublicRoute>
+        )
+      },
+      {
+        path: 'register',
+        element: (
+          <PublicRoute>
+            <Register />
+          </PublicRoute>
+        )
+      },
+      {
         path: 'create-character/:adventureId',
         element: (
-          <LazyRoute>
+          <ProtectedRoute>
             <CharacterCreation />
-          </LazyRoute>
+          </ProtectedRoute>
         )
       },
       {
         path: 'game/:gameId',
         element: (
-          <LazyRoute>
+          <ProtectedRoute>
             <Game />
-          </LazyRoute>
+          </ProtectedRoute>
         )
       },
       {
         path: 'settings',
         element: (
-          <LazyRoute>
+          <ProtectedRoute>
             <Settings />
-          </LazyRoute>
+          </ProtectedRoute>
         )
       },
       {
@@ -87,9 +140,11 @@ const router = createBrowserRouter([
 
 export function App() {
   return (
-    <ErrorBoundary>
-      <RouterProvider router={router} />
-    </ErrorBoundary>
+    <AuthProvider>
+      <ErrorBoundary>
+        <RouterProvider router={router} />
+      </ErrorBoundary>
+    </AuthProvider>
   );
 }
 

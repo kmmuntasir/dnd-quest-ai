@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Palette, Sliders, Volume2, Shield, Check } from 'lucide-react';
+import { Palette, Sliders, Shield, Check } from 'lucide-react';
 import { Card, CardBody, CardFooter } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Select } from '../components/ui/Input';
 import { Toast } from '../components/ui/Toast';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { settingsAPI } from '../services/api';
 
 const imageStyles = [
   { value: 'fantasy art', label: 'Fantasy Art' },
@@ -39,10 +37,11 @@ export function Settings() {
 
   const loadSettings = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/settings`);
+      const response = await settingsAPI.get();
+      const data = response.data || response;
       setSettings(prev => ({
         ...prev,
-        ...response.data
+        ...data
       }));
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -52,7 +51,7 @@ export function Settings() {
   const saveSettings = async () => {
     try {
       setLoading(true);
-      await axios.put(`${API_BASE_URL}/settings`, settings);
+      await settingsAPI.update(settings);
 
       setLoading(false);
       setShowSuccess(true);
@@ -67,10 +66,11 @@ export function Settings() {
   const testAIConnection = async () => {
     try {
       setTestingAI(true);
-      const response = await axios.get(`${API_BASE_URL}/settings/ai/test`);
+      const response = await settingsAPI.testAI();
+      const data = response.data || response;
       setAiStatus({
-        groq: response.data.groq || false,
-        pollinations: response.data.pollinations || false
+        groq: data.groq || false,
+        pollinations: data.pollinations || false
       });
       setTestingAI(false);
     } catch (error) {
@@ -245,7 +245,7 @@ export function Settings() {
         {/* Info Section */}
         <div className="bg-background-card/50 p-6 rounded-xl border border-background-input text-center">
           <p className="text-gray-400 text-sm">
-            Settings are saved locally in your browser. Changes apply immediately.
+            Settings are saved to your account. Changes apply immediately.
           </p>
         </div>
       </div>

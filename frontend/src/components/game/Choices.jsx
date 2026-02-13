@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronRight, Check } from 'lucide-react';
+import PropTypes from 'prop-types';
 
 export function ChoiceButton({ choice, index, selected, onSelect, disabled = false, variant = 'default' }) {
   const isSelected = selected === index;
@@ -107,3 +108,33 @@ export function ChoicesList({ choices, onSelectChoice, disabled = false, selecte
 }
 
 export default { ChoiceButton, ChoicesList };
+
+// PropTypes for ChoiceButton
+ChoiceButton.propTypes = {
+  choice: PropTypes.string.isRequired,
+  index: PropTypes.number.isRequired,
+  selected: PropTypes.number,
+  onSelect: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
+  variant: PropTypes.oneOf(['default', 'selected', 'hover'])
+};
+
+ChoiceButton.defaultProps = {
+  disabled: false,
+  variant: 'default',
+  selected: null
+};
+
+// PropTypes for ChoicesList
+ChoicesList.propTypes = {
+  choices: PropTypes.arrayOf(PropTypes.string),
+  onSelectChoice: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
+  selectedIndex: PropTypes.number
+};
+
+ChoicesList.defaultProps = {
+  choices: [],
+  disabled: false,
+  selectedIndex: null
+};

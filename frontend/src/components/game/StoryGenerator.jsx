@@ -1,13 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { Sparkles, ArrowRight, Zap, Dices, Wand2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardBody } from '../ui/Card';
 import { Input, Textarea, Select } from '../ui/Input';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { adventuresAPI } from '../../services/api';
 
 const themes = [
   { value: 'fantasy', label: 'Fantasy' },
@@ -70,14 +68,14 @@ export function StoryGenerator() {
   const handleGenerateContext = async () => {
     setGeneratingContext(true);
     try {
-      const response = await axios.post(`${API_BASE_URL}/adventures/generate-context`, {
+      const response = await adventuresAPI.generateContext({
         theme: formData.theme,
         tone: formData.tone,
         difficulty: formData.difficulty
       });
       setFormData(prev => ({
         ...prev,
-        context: response.data.context
+        context: response.data?.context || response.context
       }));
     } catch (error) {
       console.error('Failed to generate context:', error);
@@ -92,10 +90,11 @@ export function StoryGenerator() {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/adventures/generate`, formData);
+      const response = await adventuresAPI.generate(formData);
+      const adventureId = response.data?.adventureId || response.adventureId;
 
       // Navigate to character creation with the new adventure ID
-      navigate(`/create-character/${response.data.adventureId}`, { replace: true });
+      navigate(`/create-character/${adventureId}`, { replace: true });
     } catch (error) {
       console.error('Failed to generate adventure:', error);
       alert(error.response?.data?.error || 'Failed to generate adventure. Please try again.');

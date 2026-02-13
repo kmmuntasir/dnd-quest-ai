@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import PropTypes from 'prop-types';
 
 export function DiceRoller({ onRoll, disabled = false }) {
   const [rolling, setRolling] = useState(false);
@@ -145,5 +146,14 @@ export function DiceRoller({ onRoll, disabled = false }) {
     </div>
   );
 }
+
+DiceRoller.propTypes = {
+  onRoll: PropTypes.func.isRequired,
+  disabled: PropTypes.bool
+};
+
+DiceRoller.defaultProps = {
+  disabled: false
+};
 
 export default DiceRoller;

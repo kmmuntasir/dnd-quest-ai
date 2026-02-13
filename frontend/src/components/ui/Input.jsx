@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import PropTypes from 'prop-types';
 
 export function Input({
   label,
@@ -50,6 +51,31 @@ export function Input({
   );
 }
 
+Input.propTypes = {
+  label: PropTypes.string,
+  type: PropTypes.oneOf(['text', 'email', 'password', 'number', 'tel', 'url', 'search']),
+  placeholder: PropTypes.string,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onChange: PropTypes.func,
+  error: PropTypes.string,
+  disabled: PropTypes.bool,
+  'aria-label': PropTypes.string,
+  'aria-describedby': PropTypes.string,
+  'aria-invalid': PropTypes.bool,
+  required: PropTypes.bool,
+  className: PropTypes.string
+};
+
+Input.defaultProps = {
+  type: 'text',
+  placeholder: '',
+  value: '',
+  error: '',
+  disabled: false,
+  required: false,
+  className: ''
+};
+
 export function Textarea({
   label,
   placeholder = '',
@@ -97,6 +123,30 @@ export function Textarea({
     </div>
   );
 }
+
+Textarea.propTypes = {
+  label: PropTypes.string,
+  placeholder: PropTypes.string,
+  value: PropTypes.string,
+  onChange: PropTypes.func,
+  error: PropTypes.string,
+  disabled: PropTypes.bool,
+  rows: PropTypes.number,
+  required: PropTypes.bool,
+  'aria-label': PropTypes.string,
+  'aria-describedby': PropTypes.string,
+  className: PropTypes.string
+};
+
+Textarea.defaultProps = {
+  placeholder: '',
+  value: '',
+  error: '',
+  disabled: false,
+  rows: 4,
+  required: false,
+  className: ''
+};
 
 export function Select({
   label,
@@ -150,5 +200,34 @@ export function Select({
     </div>
   );
 }
+
+Select.propTypes = {
+  label: PropTypes.string,
+  options: PropTypes.arrayOf(
+    PropTypes.shape({
+      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+      label: PropTypes.string.isRequired
+    })
+  ),
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  onChange: PropTypes.func,
+  error: PropTypes.string,
+  disabled: PropTypes.bool,
+  placeholder: PropTypes.string,
+  required: PropTypes.bool,
+  'aria-label': PropTypes.string,
+  'aria-describedby': PropTypes.string,
+  className: PropTypes.string
+};
+
+Select.defaultProps = {
+  options: [],
+  value: '',
+  error: '',
+  disabled: false,
+  placeholder: 'Select...',
+  required: false,
+  className: ''
+};
 
 export default { Input, Textarea, Select };

@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import PropTypes from 'prop-types';
 
 export function Button({
   children,
@@ -70,5 +71,27 @@ export function Button({
     </button>
   );
 }
+
+Button.propTypes = {
+  children: PropTypes.node.isRequired,
+  variant: PropTypes.oneOf(['primary', 'secondary', 'danger']),
+  size: PropTypes.oneOf(['sm', 'md', 'lg']),
+  disabled: PropTypes.bool,
+  loading: PropTypes.bool,
+  'aria-label': PropTypes.string,
+  'aria-describedby': PropTypes.string,
+  className: PropTypes.string,
+  type: PropTypes.oneOf(['button', 'submit', 'reset']),
+  onClick: PropTypes.func
+};
+
+Button.defaultProps = {
+  variant: 'primary',
+  size: 'md',
+  disabled: false,
+  loading: false,
+  className: '',
+  type: 'button'
+};
 
 export default Button;

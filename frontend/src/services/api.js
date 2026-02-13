@@ -37,42 +37,6 @@ const safeStorage = {
  */
 const pendingRequests = new Map();
 
-/**
- * Generate a unique key for request deduplication
- * @param {Object} config - Axios request config
- * @returns {string} Unique request key
- */
-function getRequestKey(config) {
-  const { method, url, data, params } = config;
-  const dataStr = data ? JSON.stringify(data) : '';
-  const paramsStr = params ? JSON.stringify(params) : '';
-  return `${method}:${url}:${dataStr}:${paramsStr}`;
-}
-
-/**
- * Check if request should be deduplicated
- * Only deduplicate GET requests and specific POST endpoints
- * @param {Object} config - Axios request config
- * @returns {boolean} Whether to deduplicate
- */
-function shouldDeduplicate(config) {
-  // Always deduplicate GET requests
-  if (config.method === 'get') return true;
-
-  // For POST requests, only deduplicate specific endpoints
-  // (e.g., not form submissions or state-changing operations)
-  const deduplicatablePosts = [
-    '/api/adventures/generate',
-    '/api/settings/ai/test'
-  ];
-
-  if (config.method === 'post' && deduplicatablePosts.some(ep => config.url?.includes(ep))) {
-    return true;
-  }
-
-  return false;
-}
-
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -82,7 +46,7 @@ const api = axios.create({
   }
 });
 
-// Request interceptor - add auth and handle deduplication
+// Request interceptor - add auth token
 api.interceptors.request.use(
   (config) => {
     // Add auth token if available
@@ -90,24 +54,6 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
-    // Check for duplicate pending request
-    if (shouldDeduplicate(config)) {
-      const requestKey = getRequestKey(config);
-
-      if (pendingRequests.has(requestKey)) {
-        // Return the existing promise for duplicate requests
-        // This creates a custom adapter that returns the cached promise
-        const existingPromise = pendingRequests.get(requestKey);
-        config.adapter = () => existingPromise;
-        return config;
-      }
-
-      // Store the request promise for deduplication
-      // The promise will be set in the response interceptor
-      config._requestKey = requestKey;
-    }
-
     return config;
   },
   (error) => {
@@ -115,23 +61,12 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - handle errors and cleanup deduplication
+// Response interceptor - handle errors
 api.interceptors.response.use(
   (response) => {
-    // Clean up pending request
-    const requestKey = response.config._requestKey;
-    if (requestKey) {
-      pendingRequests.delete(requestKey);
-    }
     return response.data;
   },
   (error) => {
-    // Clean up pending request on error
-    const requestKey = error.config?._requestKey;
-    if (requestKey) {
-      pendingRequests.delete(requestKey);
-    }
-
     console.error('API Error:', error);
 
     // Handle common errors
@@ -165,7 +100,9 @@ api.interceptors.response.use(
   }
 );
 
-// Override api methods to track pending requests
+// Override api methods to track pending requests for deduplication
+// Note: We handle deduplication here instead of in the interceptor
+// because we need access to the promise before the interceptor runs
 const originalGet = api.get.bind(api);
 const originalPost = api.post.bind(api);
 
@@ -178,20 +115,19 @@ api.get = (url, config = {}) => {
 
   const promise = originalGet(url, config);
   pendingRequests.set(requestKey, promise);
-
-  // Clean up after resolution
   promise.finally(() => pendingRequests.delete(requestKey));
 
   return promise;
 };
 
 api.post = (url, data, config = {}) => {
+  // Only deduplicate specific POST endpoints using exact URL matching
   const deduplicatablePosts = [
     '/api/adventures/generate',
     '/api/settings/ai/test'
   ];
 
-  const shouldDedupe = deduplicatablePosts.some(ep => url.includes(ep));
+  const shouldDedupe = deduplicatablePosts.some(ep => url === ep);
 
   if (shouldDedupe) {
     const requestKey = `post:${url}:${JSON.stringify(data)}:`;
@@ -202,8 +138,6 @@ api.post = (url, data, config = {}) => {
 
     const promise = originalPost(url, data, config);
     pendingRequests.set(requestKey, promise);
-
-    // Clean up after resolution
     promise.finally(() => pendingRequests.delete(requestKey));
 
     return promise;
@@ -249,7 +183,9 @@ export const gamesAPI = {
  */
 export const savedGamesAPI = {
   getAll: (params) => api.get('/api/saved-games', { params }),
-  delete: (id) => api.delete(`/api/saved-games/${id}`)
+  delete: (id) => api.delete(`/api/saved-games/${id}`),
+  getAdventures: () => api.get('/api/saved-games/adventures'),
+  getByAdventure: (adventureId) => api.get(`/api/saved-games/adventures/${adventureId}/games`)
 };
 
 /**
@@ -266,6 +202,17 @@ export const settingsAPI = {
  */
 export const imagesAPI = {
   regenerate: (hash) => api.post(`/api/images/${hash}/regenerate`)
+};
+
+/**
+ * Auth API
+ */
+export const authAPI = {
+  login: (data) => api.post('/api/auth/login', data),
+  register: (data) => api.post('/api/auth/register', data),
+  getCurrentUser: () => api.get('/api/auth/me'),
+  changePassword: (data) => api.put('/api/auth/password', data),
+  logout: () => api.post('/api/auth/logout')
 };
 
 /**
