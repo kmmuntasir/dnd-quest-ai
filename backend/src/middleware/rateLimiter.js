@@ -3,13 +3,23 @@ const { logger } = require('../utils/logger');
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes per IP
+ * Higher limit in development, production limit per 15 minutes per IP
  */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher in dev
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
+  // Skip rate limiting for lightweight status/polling endpoints
+  skip: (req) => {
+    const skipPaths = [
+      '/status',           // Image status polling
+      '/health',           // Health checks
+      '/health/live',      // Liveness probe
+      '/health/ready'      // Readiness probe
+    ];
+    return skipPaths.some(path => req.path.endsWith(path));
+  },
   message: {
     error: 'Too many requests',
     message: 'Please try again later.'

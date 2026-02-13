@@ -209,8 +209,8 @@ export function Gallery() {
 
   // Poll for image status until ready or failed
   const pollImageStatus = async (hash, attempts = 0) => {
-    const maxAttempts = 120; // 2 minutes at 1s intervals
-    const pollInterval = 1000; // 1 second
+    const maxAttempts = 36; // 3 minutes at 5s intervals
+    const pollInterval = 5000; // 5 seconds
 
     if (attempts >= maxAttempts) {
       setImageStatus(prev => ({ ...prev, [hash]: 'failed' }));
