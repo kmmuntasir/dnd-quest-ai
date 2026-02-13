@@ -10,11 +10,11 @@ const { logger } = require('../../utils/logger');
  * Image Provider Configuration
  */
 const imageProviderConfig = {
-  // Primary provider to use
-  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'pollinations',
+  // Primary provider to use (aihorde is faster and more reliable)
+  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde',
 
   // Fallback providers (comma-separated list)
-  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde')
+  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'pollinations')
     .split(',')
     .map(p => p.trim())
     .filter(p => p),
@@ -35,20 +35,20 @@ const imageProviderConfig = {
     }
   },
 
-  // AI Horde-specific config
+  // AI Horde-specific config (optimized for speed)
   aihorde: {
     apiKey: process.env.AI_HORDE_API_KEY || null,
     apiUrl: 'https://aihorde.net/api/v2',
-    model: process.env.AI_HORDE_MODEL || 'AlbedoBase XL',
-    steps: parseInt(process.env.AI_HORDE_STEPS) || 25,
-    sampler: process.env.AI_HORDE_SAMPLER || 'k_euler',
-    width: parseInt(process.env.AI_HORDE_WIDTH) || 1024,
-    height: parseInt(process.env.AI_HORDE_HEIGHT) || 1024,
+    model: process.env.AI_HORDE_MODEL || 'stable_diffusion', // Faster than XL models
+    steps: parseInt(process.env.AI_HORDE_STEPS) || 20, // Fewer steps = faster
+    sampler: process.env.AI_HORDE_SAMPLER || 'k_euler_a', // Fast sampler
+    width: parseInt(process.env.AI_HORDE_WIDTH) || 512, // Smaller = faster
+    height: parseInt(process.env.AI_HORDE_HEIGHT) || 512, // Smaller = faster
     cfgScale: parseFloat(process.env.AI_HORDE_CFG_SCALE) || 7,
     // Polling configuration for async generation
-    pollInterval: parseInt(process.env.AI_HORDE_POLL_INTERVAL) || 5000,
-    maxPollAttempts: parseInt(process.env.AI_HORDE_MAX_POLL_ATTEMPTS) || 120, // 10 min max
-    timeout: parseInt(process.env.AI_HORDE_TIMEOUT) || 60000,
+    pollInterval: parseInt(process.env.AI_HORDE_POLL_INTERVAL) || 3000, // Check every 3s
+    maxPollAttempts: parseInt(process.env.AI_HORDE_MAX_POLL_ATTEMPTS) || 180, // 9 min max (3s * 180)
+    timeout: parseInt(process.env.AI_HORDE_TIMEOUT) || 120000, // 2 minute overall timeout
     circuitBreaker: {
       failureThreshold: 5,
       resetTimeout: 60000,
@@ -117,9 +117,12 @@ function getTextProviderConfig(providerName) {
  * @returns {string[]}
  */
 function getAvailableImageProviders() {
-  return Object.keys(imageProviderConfig).filter(
-    key => typeof imageProviderConfig[key] === 'object' && imageProviderConfig[key] !== null
-  );
+  // Only return actual provider config keys, not metadata like 'primary' or 'fallbacks'
+  const providerKeys = ['pollinations', 'aihorde'];
+  return providerKeys.filter(key => {
+    const config = imageProviderConfig[key];
+    return config && typeof config === 'object' && !Array.isArray(config);
+  });
 }
 
 /**

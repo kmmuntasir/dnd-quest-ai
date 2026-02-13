@@ -9,7 +9,7 @@ import { DiceRoller } from '../components/game/DiceRoller';
 import { ChoicesList } from '../components/game/Choices';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 import { useToast } from '../components/ui/ToastContext';
-import { gamesAPI, imagesAPI } from '../services/api';
+import { gamesAPI, imagesAPI, adventuresAPI } from '../services/api';
 
 export function Game() {
   const { gameId } = useParams();
@@ -30,6 +30,10 @@ export function Game() {
   const [goingBack, setGoingBack] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+
+  // Image status tracking
+  const [imageStatus, setImageStatus] = useState({});
+  const [imageRefreshKey, setImageRefreshKey] = useState(0);
 
   // Ref to track difficulty for setTimeout closures (avoids stale closure issue)
   const difficultyRef = useRef(null);
@@ -71,6 +75,57 @@ export function Game() {
   useEffect(() => {
     loadGame();
   }, [loadGame]);
+
+  // Load image status for current scene
+  const loadImageStatus = useCallback(async () => {
+    if (!game?.adventure?.id && !game?.adventure_id) return;
+
+    const adventureId = game?.adventure?.id || game?.adventure_id;
+    try {
+      const response = await adventuresAPI.getStatus(adventureId);
+      const data = response.data || response;
+
+      // Build status map from images array
+      const statusMap = {};
+      if (data.images) {
+        data.images.forEach(img => {
+          statusMap[img.hash] = img.status;
+        });
+      }
+      setImageStatus(statusMap);
+
+      // Check if current scene image just became ready
+      if (currentScene?.image_hash) {
+        const currentStatus = statusMap[currentScene.image_hash];
+        if (currentStatus === 'ready') {
+          // Force image refresh by updating the refresh key
+          setImageRefreshKey(prev => prev + 1);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load image status:', error);
+    }
+  }, [game?.adventure?.id, game?.adventure_id, currentScene?.image_hash]);
+
+  // Initial status load when game is loaded
+  useEffect(() => {
+    if (game && currentScene) {
+      loadImageStatus();
+    }
+  }, [game, currentScene, loadImageStatus]);
+
+  // Poll for status updates when current scene image is processing
+  useEffect(() => {
+    const currentImageStatus = currentScene?.image_hash ? imageStatus[currentScene.image_hash] : null;
+
+    if (currentImageStatus === 'processing' || currentImageStatus === 'pending' || !currentImageStatus) {
+      const interval = setInterval(() => {
+        loadImageStatus();
+      }, 3000); // Poll every 3 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [currentScene?.image_hash, imageStatus, loadImageStatus]);
 
   const handleGoBack = async () => {
     if (!canGoBack) return;
@@ -360,9 +415,20 @@ export function Game() {
               <FadeIn delay={100}>
                 <div className="relative aspect-video bg-background-input rounded-2xl overflow-hidden shadow-2xl border border-background-input">
                   <Image
-                    src={currentScene.image_url}
+                    src={currentScene.image_url ? `${currentScene.image_url}${currentScene.image_url.includes('?') ? '&' : '?'}refresh=${imageRefreshKey}` : null}
                     alt={currentScene.description}
                   />
+                  {/* Image status indicator */}
+                  {currentScene.image_hash && imageStatus[currentScene.image_hash] && imageStatus[currentScene.image_hash] !== 'ready' && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background-dark/80">
+                      <div className="text-center">
+                        <div className="animate-spin w-8 h-8 border-2 border-accent-gold border-t-transparent rounded-full mx-auto mb-2"></div>
+                        <p className="text-accent-gold text-sm">
+                          {imageStatus[currentScene.image_hash] === 'processing' ? 'Generating image...' : 'Waiting in queue...'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   {/* Regenerate button */}
                   {currentScene.image_hash && (
                     <button

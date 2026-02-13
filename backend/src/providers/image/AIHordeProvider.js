@@ -70,9 +70,10 @@ class AIHordeProvider extends ImageProvider {
         width,
         height,
         steps: this.steps,
-        karras: true,
-        post_processing: ['GFPGAN'] // Optional face restoration
+        n: 1
       },
+      nsfw: false,
+      censor_nsfw: true,
       models: [this.model],
       r2: true // Use R2 for faster image delivery
     };
@@ -99,13 +100,30 @@ class AIHordeProvider extends ImageProvider {
   }
 
   /**
-   * Check generation status
+   * Check generation status (lightweight check endpoint)
    * @param {string} requestId - Request ID
-   * @returns {Promise<Object>} Status response
+   * @returns {Promise<Object>} Status response (without image data)
    */
   async checkGenerationStatus(requestId) {
     const response = await axios.get(
       `${this.apiUrl}/generate/check/${requestId}`,
+      {
+        headers: this.getHeaders(),
+        timeout: 10000
+      }
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Get full generation status with image URLs
+   * @param {string} requestId - Request ID
+   * @returns {Promise<Object>} Full status response with generations
+   */
+  async getGenerationResult(requestId) {
+    const response = await axios.get(
+      `${this.apiUrl}/generate/status/${requestId}`,
       {
         headers: this.getHeaders(),
         timeout: 10000
@@ -127,13 +145,17 @@ class AIHordeProvider extends ImageProvider {
       const status = await this.checkGenerationStatus(requestId);
 
       if (status.done) {
-        logger.info('AI Horde generation complete', {
-          requestId,
-          generations: status.generations?.length || 0
-        });
+        logger.info('AI Horde generation done, fetching result', { requestId });
 
-        if (status.generations && status.generations.length > 0) {
-          return status.generations[0];
+        // Get the actual image from the status endpoint
+        const result = await this.getGenerationResult(requestId);
+
+        if (result.generations && result.generations.length > 0) {
+          logger.info('AI Horde image ready', {
+            requestId,
+            imageUrl: result.generations[0].img?.substring(0, 50) + '...'
+          });
+          return result.generations[0];
         }
 
         throw new Error('Generation complete but no images returned');
