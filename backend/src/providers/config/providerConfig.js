@@ -10,11 +10,12 @@ const { logger } = require('../../utils/logger');
  * Image Provider Configuration
  */
 const imageProviderConfig = {
-  // Primary provider to use (aihorde is faster and more reliable)
-  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde',
+  // Primary provider to use (aihorde-sdxl for quality, aihorde for speed)
+  primary: process.env.IMAGE_PROVIDER_PRIMARY || 'aihorde-sdxl',
 
   // Fallback providers (comma-separated list)
-  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'pollinations')
+  // Falls back to fast aihorde if SDXL fails, then pollinations
+  fallbacks: (process.env.IMAGE_PROVIDER_FALLBACKS || 'aihorde,pollinations')
     .split(',')
     .map(p => p.trim())
     .filter(p => p),
@@ -53,6 +54,29 @@ const imageProviderConfig = {
       failureThreshold: 5,
       resetTimeout: 60000,
       successThreshold: 2
+    }
+  },
+
+  // AI Horde SDXL-specific config (optimized for quality)
+  // Higher quality but slower (~60-90 seconds per image)
+  'aihorde-sdxl': {
+    apiKey: process.env.AI_HORDE_API_KEY || null, // Uses same API key
+    apiUrl: 'https://aihorde.net/api/v2',
+    model: process.env.AI_HORDE_SDXL_MODEL || 'AlbedoBase XL (SDXL)', // Best SDXL model on Horde
+    steps: parseInt(process.env.AI_HORDE_SDXL_STEPS) || 30, // 30 is sweet spot for SDXL
+    sampler: process.env.AI_HORDE_SDXL_SAMPLER || 'k_dpmpp_2m', // Best sampler for SDXL
+    width: parseInt(process.env.AI_HORDE_SDXL_WIDTH) || 1024, // SDXL native resolution
+    height: parseInt(process.env.AI_HORDE_SDXL_HEIGHT) || 1024, // SDXL native resolution
+    cfgScale: parseFloat(process.env.AI_HORDE_SDXL_CFG_SCALE) || 7,
+    karras: process.env.AI_HORDE_SDXL_KARRAS !== 'false', // Default true, improves details
+    // Longer polling for SDXL (slower generation)
+    pollInterval: parseInt(process.env.AI_HORDE_SDXL_POLL_INTERVAL) || 5000, // Check every 5s
+    maxPollAttempts: parseInt(process.env.AI_HORDE_SDXL_MAX_POLL_ATTEMPTS) || 180, // 15 min max (5s * 180)
+    timeout: parseInt(process.env.AI_HORDE_SDXL_TIMEOUT) || 180000, // 3 minute overall timeout
+    circuitBreaker: {
+      failureThreshold: 3, // Lower threshold since SDXL is less reliable
+      resetTimeout: 120000, // 2 minutes
+      successThreshold: 1
     }
   }
 };
@@ -118,7 +142,7 @@ function getTextProviderConfig(providerName) {
  */
 function getAvailableImageProviders() {
   // Only return actual provider config keys, not metadata like 'primary' or 'fallbacks'
-  const providerKeys = ['pollinations', 'aihorde'];
+  const providerKeys = ['pollinations', 'aihorde', 'aihorde-sdxl'];
   return providerKeys.filter(key => {
     const config = imageProviderConfig[key];
     return config && typeof config === 'object' && !Array.isArray(config);
@@ -152,6 +176,13 @@ function validateProviderConfig() {
   if (primaryImage === 'aihorde' || imageProviderConfig.fallbacks.includes('aihorde')) {
     if (!imageProviderConfig.aihorde.apiKey) {
       warnings.push('AI_HORDE_API_KEY is not set - AI Horde provider will not work');
+    }
+  }
+
+  // Check if AI Horde SDXL has API key when configured
+  if (primaryImage === 'aihorde-sdxl' || imageProviderConfig.fallbacks.includes('aihorde-sdxl')) {
+    if (!imageProviderConfig['aihorde-sdxl'].apiKey) {
+      warnings.push('AI_HORDE_API_KEY is not set - AI Horde SDXL provider will not work');
     }
   }
 

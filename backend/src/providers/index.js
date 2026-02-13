@@ -19,6 +19,7 @@ const {
 // Provider class imports (lazy loaded)
 let PollinationsProvider = null;
 let AIHordeProvider = null;
+let AIHordeSDXLProvider = null;
 let GroqProvider = null;
 
 // Provider instance cache
@@ -34,6 +35,9 @@ function loadProviderClasses() {
   }
   if (!AIHordeProvider) {
     AIHordeProvider = require('./image/AIHordeProvider');
+  }
+  if (!AIHordeSDXLProvider) {
+    AIHordeSDXLProvider = require('./image/AIHordeSDXLProvider');
   }
   if (!GroqProvider) {
     GroqProvider = require('./text/GroqProvider');
@@ -72,6 +76,13 @@ function getImageProvider(name) {
         return null;
       }
       provider = new AIHordeProvider(config);
+      break;
+    case 'aihorde-sdxl':
+      if (!config.apiKey) {
+        logger.warn('AI Horde API key not configured, SDXL provider unavailable');
+        return null;
+      }
+      provider = new AIHordeSDXLProvider(config);
       break;
     default:
       logger.warn(`Unknown image provider: ${name}`);

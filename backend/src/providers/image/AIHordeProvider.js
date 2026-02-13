@@ -275,8 +275,8 @@ class AIHordeProvider extends ImageProvider {
       if (existingImage) {
         // Update existing record
         await db.run(`
-          UPDATE images SET status = 'processing', provider = 'aihorde' WHERE hash = ?
-        `, [hash]);
+          UPDATE images SET status = 'processing', provider = ? WHERE hash = ?
+        `, [this.name, hash]);
       } else {
         // Create new record
         await db.run(`
@@ -285,7 +285,7 @@ class AIHordeProvider extends ImageProvider {
         `, [hash, enhancedPrompt, width, height]);
       }
 
-      logger.info('Generating and fetching image', { hash, provider: 'aihorde' });
+      logger.info('Generating and fetching image', { hash, provider: this.name });
 
       // Submit generation request
       const requestId = await this.submitGenerationRequest(enhancedPrompt, { width, height });
@@ -322,7 +322,7 @@ class AIHordeProvider extends ImageProvider {
         hash,
         url: `/api/images/${hash}`,
         file_path,
-        provider: 'aihorde'
+        provider: this.name
       };
     });
   }
