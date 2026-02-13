@@ -284,17 +284,20 @@ async function regenerateImage(oldHash) {
           // Delete the old image
           await deleteImage(oldHash);
 
+          // Use the actual hash from result (may differ if retry occurred)
+          const actualHash = result.hash || newHash;
+
           logger.info('Image regenerated successfully', {
             oldHash,
-            newHash,
+            newHash: actualHash,
             provider: providerName
           });
 
           return {
             success: true,
             oldHash,
-            newHash,
-            newUrl: `/api/images/${newHash}`,
+            newHash: actualHash,
+            newUrl: `/api/images/${actualHash}`,
             provider: providerName
           };
         }

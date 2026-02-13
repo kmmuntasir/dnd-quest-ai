@@ -263,10 +263,10 @@ class AIHordeProvider extends ImageProvider {
     // Enhance prompt with style keywords
     const enhancedPrompt = this.enhancePrompt(prompt, style);
 
-    return this.executeWithProtection(async () => {
-      // Use existing hash if provided (for queue), otherwise generate new one
-      const hash = existingHash || this.generateHash();
+    // Generate hash ONCE outside the retry callback to ensure consistency
+    const hash = existingHash || this.generateHash();
 
+    return this.executeWithProtection(async () => {
       const db = require('../../config/database');
 
       // Check if image record exists (for queue jobs)
