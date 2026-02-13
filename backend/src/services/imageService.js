@@ -235,37 +235,83 @@ async function testConnection() {
 
 /**
  * Regenerate an image with a new seed
+ * Uses fallback chain when primary provider fails
  * @param {string} oldHash - Old image hash
  * @returns {Promise<Object>} Result with success status and new hash
  */
 async function regenerateImage(oldHash) {
+  const { getImageFallbackChain, getImageProvider } = require('../providers');
+
   try {
-    const provider = getImageProvider(imageProviderConfig.primary);
-
-    // Check if provider supports regeneration
-    if (provider && typeof provider.regenerateImage === 'function') {
-      return await provider.regenerateImage(oldHash);
-    }
-
-    // Fallback: Generate new image with original prompt
+    // Get original image metadata
     const metadata = await getImageMetadata(oldHash);
     if (!metadata) {
       return { success: false, error: 'Image not found' };
     }
 
-    const newResult = await generateImage(metadata.prompt, {
-      width: metadata.width,
-      height: metadata.height
-    });
+    // Generate new hash for the regenerated image
+    const newHash = generateImageHash();
 
-    await deleteImage(oldHash);
+    const fallbackChain = getImageFallbackChain();
+    let lastError = null;
 
-    return {
-      success: true,
-      oldHash,
-      newHash: newResult.hash,
-      newUrl: newResult.url
-    };
+    // Try each provider in the fallback chain
+    for (const providerName of fallbackChain) {
+      const provider = getImageProvider(providerName);
+      if (!provider) {
+        logger.debug(`Provider ${providerName} not available for regeneration`);
+        continue;
+      }
+
+      // Check if provider can accept requests
+      if (!provider.canRequest()) {
+        logger.debug(`Provider ${providerName} circuit breaker open, skipping regeneration`);
+        continue;
+      }
+
+      try {
+        logger.info(`Trying ${providerName} for image regeneration`, { oldHash, newHash });
+
+        // Use generateAndFetch with the new hash
+        const result = await provider.generateAndFetch(metadata.prompt, {
+          existingHash: newHash,
+          width: metadata.width,
+          height: metadata.height,
+          style: 'fantasy art'
+        });
+
+        if (result && result.file_path) {
+          // Delete the old image
+          await deleteImage(oldHash);
+
+          logger.info('Image regenerated successfully', {
+            oldHash,
+            newHash,
+            provider: providerName
+          });
+
+          return {
+            success: true,
+            oldHash,
+            newHash,
+            newUrl: `/api/images/${newHash}`,
+            provider: providerName
+          };
+        }
+      } catch (providerError) {
+        lastError = providerError;
+        logger.warn(`Provider ${providerName} failed for regeneration`, {
+          oldHash,
+          error: providerError.message
+        });
+        // Continue to next provider
+      }
+    }
+
+    // All providers failed
+    const errorMessage = lastError ? lastError.message : 'No providers available';
+    logger.error('All providers failed for regeneration', { oldHash, error: errorMessage });
+    return { success: false, error: errorMessage };
   } catch (error) {
     logger.error('Failed to regenerate image', { oldHash, error: error.message });
     return { success: false, error: error.message };

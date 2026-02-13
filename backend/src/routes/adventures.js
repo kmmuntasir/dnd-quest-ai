@@ -439,4 +439,122 @@ router.delete('/:id', requireAuth, checkOwnership('adventure'), validate(adventu
   }
 });
 
+/**
+ * POST /api/adventures/:id/repair-images
+ * Re-queue pending images for legacy adventures
+ * This is useful for adventures created before the queue system
+ */
+router.post('/:id/repair-images', requireAuth, checkOwnership('adventure'), validate(adventureIdSchema, 'params'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get adventure
+    const adventure = await db.get('SELECT * FROM adventures WHERE id = ?', [id]);
+    if (!adventure) {
+      return res.status(404).json({ error: 'Adventure not found' });
+    }
+
+    // Get all scenes and NPCs with their image hashes
+    const scenes = await db.all('SELECT id, image_hash, description FROM scenes WHERE adventure_id = ?', [id]);
+    const npcs = await db.all('SELECT id, portrait_hash, name, description, role FROM npcs WHERE adventure_id = ?', [id]);
+
+    // Get image metadata for all hashes
+    const imageHashes = [
+      ...scenes.map(s => s.image_hash).filter(Boolean),
+      ...npcs.map(n => n.portrait_hash).filter(Boolean)
+    ];
+
+    if (imageHashes.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No images to repair',
+        queuedCount: 0
+      });
+    }
+
+    const placeholders = imageHashes.map(() => '?').join(',');
+    const images = await db.all(
+      `SELECT hash, status, prompt FROM images WHERE hash IN (${placeholders})`,
+      imageHashes
+    );
+
+    // Find images that are pending or failed (need re-processing)
+    const pendingImages = images.filter(img => img.status === 'pending' || img.status === 'failed');
+
+    if (pendingImages.length === 0) {
+      return res.json({
+        success: true,
+        message: 'All images are already processed or processing',
+        queuedCount: 0
+      });
+    }
+
+    // Update adventure status to pending
+    await db.run(`
+      UPDATE adventures
+      SET status = 'pending',
+          images_total = ?,
+          images_ready = (SELECT COUNT(*) FROM images WHERE hash IN (${placeholders}) AND status = 'ready'),
+          images_failed = 0
+      WHERE id = ?
+    `, [imageHashes.length, ...imageHashes, id]);
+
+    // Queue jobs for pending/failed images
+    const imageJobs = [];
+
+    for (const img of pendingImages) {
+      // Determine if it's a scene or NPC image
+      const scene = scenes.find(s => s.image_hash === img.hash);
+      const npc = npcs.find(n => n.portrait_hash === img.hash);
+
+      let prompt = img.prompt;
+      let options = { style: 'fantasy art', width: 1024, height: 1024 };
+
+      if (npc && !prompt) {
+        prompt = `Portrait of ${npc.name}, ${npc.description}, ${npc.role}, character design, fantasy art style`;
+        options = { style: 'fantasy art', width: 512, height: 512 };
+      }
+
+      if (prompt) {
+        imageJobs.push({
+          hash: img.hash,
+          prompt,
+          type: npc ? 'npc' : 'scene',
+          adventureId: parseInt(id),
+          entityId: scene?.id || npc?.id,
+          options
+        });
+      }
+    }
+
+    if (imageJobs.length > 0) {
+      // Reset circuit breakers before queueing
+      const { resetProviderCircuitBreakers } = require('../queue/imageQueue');
+      resetProviderCircuitBreakers();
+
+      imageQueue.addJobs(imageJobs);
+    }
+
+    logger.info('Repair images requested', {
+      adventureId: id,
+      totalImages: imageHashes.length,
+      queuedCount: imageJobs.length
+    });
+
+    res.json({
+      success: true,
+      message: `Queued ${imageJobs.length} images for generation`,
+      totalImages: imageHashes.length,
+      queuedCount: imageJobs.length,
+      adventureStatus: 'pending'
+    });
+  } catch (error) {
+    logger.error('Error repairing images', { adventureId: req.params.id, error: error.message });
+    res.status(500).json({
+      error: 'Failed to repair images',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;

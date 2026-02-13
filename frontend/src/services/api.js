@@ -163,7 +163,9 @@ export const adventuresAPI = {
   generateContext: (data) => api.post('/api/adventures/generate-context', data),
   getById: (id) => api.get(`/api/adventures/${id}`),
   getAll: () => api.get('/api/adventures'),
-  delete: (id) => api.delete(`/api/adventures/${id}`)
+  delete: (id) => api.delete(`/api/adventures/${id}`),
+  getStatus: (id) => api.get(`/api/adventures/${id}/status`),
+  repairImages: (id) => api.post(`/api/adventures/${id}/repair-images`)
 };
 
 /**

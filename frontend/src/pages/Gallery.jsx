@@ -1,12 +1,53 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertCircle, CheckCircle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { LoadingPage } from '../components/ui/LoadingSpinner';
 import { Image, resolveImageUrl } from '../components/ui/Image';
 import { FadeIn, SlideUp } from '../components/ui/Transitions';
 import { adventuresAPI, imagesAPI } from '../services/api';
+
+// Status badge component
+function ImageStatusBadge({ status }) {
+  const statusConfig = {
+    pending: {
+      icon: Clock,
+      text: 'Queued',
+      className: 'bg-yellow-500/80 text-yellow-900'
+    },
+    processing: {
+      icon: Loader2,
+      text: 'Generating',
+      className: 'bg-blue-500/80 text-blue-900 animate-pulse'
+    },
+    ready: {
+      icon: CheckCircle,
+      text: 'Ready',
+      className: 'bg-green-500/80 text-green-900'
+    },
+    failed: {
+      icon: AlertCircle,
+      text: 'Failed',
+      className: 'bg-red-500/80 text-red-900'
+    },
+    unknown: {
+      icon: AlertCircle,
+      text: 'Unknown',
+      className: 'bg-gray-500/80 text-gray-900'
+    }
+  };
+
+  const config = statusConfig[status] || statusConfig.unknown;
+  const Icon = config.icon;
+
+  return (
+    <div className={`px-2 py-1 rounded-full ${config.className} text-xs font-medium flex items-center gap-1`}>
+      <Icon className={`w-3 h-3 ${status === 'processing' ? 'animate-spin' : ''}`} />
+      {config.text}
+    </div>
+  );
+}
 
 export function Gallery() {
   const { adventureId } = useParams();
@@ -17,10 +58,77 @@ export function Gallery() {
   const [selectedScene, setSelectedScene] = useState(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [imageStatus, setImageStatus] = useState({});
+
+  // Calculate image statistics
+  const getImageStats = useCallback(() => {
+    const stats = { total: 0, pending: 0, processing: 0, ready: 0, failed: 0 };
+    Object.values(imageStatus).forEach(status => {
+      stats.total++;
+      if (stats.hasOwnProperty(status)) {
+        stats[status]++;
+      }
+    });
+    return stats;
+  }, [imageStatus]);
+
+  // Check if any images need repair
+  const needsRepair = useCallback(() => {
+    const stats = getImageStats();
+    return stats.pending > 0 || stats.failed > 0;
+  }, [getImageStats]);
+
+  // Load adventure status (for image generation progress)
+  const loadImageStatus = useCallback(async () => {
+    try {
+      const response = await adventuresAPI.getStatus(adventureId);
+      const data = response.data || response;
+
+      // Build status map from images array
+      const statusMap = {};
+      if (data.images) {
+        data.images.forEach(img => {
+          statusMap[img.hash] = img.status;
+        });
+      }
+
+      setImageStatus(statusMap);
+
+      // Update adventure status
+      if (adventure && data.status !== adventure.status) {
+        setAdventure(prev => ({ ...prev, status: data.status }));
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Failed to load image status:', error);
+      return null;
+    }
+  }, [adventureId, adventure]);
+
+  // Poll for status updates when images are processing
+  useEffect(() => {
+    const stats = getImageStats();
+    if (stats.processing > 0 || stats.pending > 0) {
+      const interval = setInterval(() => {
+        loadImageStatus();
+      }, 5000); // Poll every 5 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [getImageStats, loadImageStatus]);
 
   useEffect(() => {
     loadAdventure();
   }, [adventureId]);
+
+  // Initial status load
+  useEffect(() => {
+    if (adventure && scenes.length > 0) {
+      loadImageStatus();
+    }
+  }, [adventure, scenes, loadImageStatus]);
 
   const loadAdventure = async () => {
     try {
@@ -82,12 +190,40 @@ export function Gallery() {
             ? { ...scene, image_hash: newHash, image_url: newUrl }
             : scene
         ));
+
+        // Update status
+        setImageStatus(prev => ({
+          ...prev,
+          [newHash]: 'processing'
+        }));
       }
     } catch (error) {
       console.error('Failed to regenerate image:', error);
-      alert(error.response?.data?.error || 'Failed to regenerate image. Please try again.');
+      alert(error.response?.data?.details || error.response?.data?.error || 'Failed to regenerate image. Please try again.');
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const handleRepairImages = async () => {
+    if (repairing) return;
+
+    try {
+      setRepairing(true);
+      const response = await adventuresAPI.repairImages(adventureId);
+      const data = response.data || response;
+
+      if (data.success) {
+        alert(`${data.message}\n\nImages will be generated in the background. This page will update automatically.`);
+        // Reload status to start polling
+        await loadAdventure();
+        await loadImageStatus();
+      }
+    } catch (error) {
+      console.error('Failed to repair images:', error);
+      alert(error.response?.data?.error || 'Failed to repair images. Please try again.');
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -95,71 +231,124 @@ export function Gallery() {
     return <LoadingPage message="Loading gallery..." />;
   }
 
+  const imageStats = getImageStats();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background-dark via-background-dark to-background-darker">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <FadeIn>
-            <div className="flex items-center gap-4 mb-8">
-              <Button
-                onClick={() => navigate(-1)}
-                variant="secondary"
-                className="gap-2"
-              >
-                <ArrowLeft className="w-5 h-5" />
-                Back
-              </Button>
-              <div>
-                <h1 className="font-display text-4xl font-bold text-white">
-                  {adventure?.title}
-                </h1>
-                <p className="text-gray-400">
-                  {scenes.length} scenes • Gallery View
-                </p>
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={() => navigate(-1)}
+                  variant="secondary"
+                  className="gap-2"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  Back
+                </Button>
+                <div>
+                  <h1 className="font-display text-4xl font-bold text-white">
+                    {adventure?.title}
+                  </h1>
+                  <p className="text-gray-400">
+                    {scenes.length} scenes • Gallery View
+                  </p>
+                </div>
+              </div>
+
+              {/* Image Status & Repair Button */}
+              <div className="flex items-center gap-4">
+                {(imageStats.pending > 0 || imageStats.processing > 0 || imageStats.failed > 0) && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-sm text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {imageStats.processing} generating
+                      </span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {imageStats.pending} queued
+                      </span>
+                      {imageStats.failed > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-1 text-red-400">
+                            <AlertCircle className="w-4 h-4" />
+                            {imageStats.failed} failed
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {needsRepair() && (
+                  <Button
+                    onClick={handleRepairImages}
+                    variant="secondary"
+                    className="gap-2"
+                    disabled={repairing}
+                  >
+                    <Wrench className={`w-4 h-4 ${repairing ? 'animate-spin' : ''}`} />
+                    {repairing ? 'Repairing...' : 'Repair Images'}
+                  </Button>
+                )}
               </div>
             </div>
           </FadeIn>
 
           {/* Gallery Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {scenes.map((scene, index) => (
-              <SlideUp key={scene.id} delay={index * 50}>
-                <Card
-                  hover
-                  className="group cursor-pointer overflow-hidden"
-                  onClick={() => openLightbox(scene)}
-                >
-                  <div className="relative aspect-square overflow-hidden">
-                    <Image
-                      src={scene.image_url}
-                      alt={`Scene ${index + 1}`}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            {scenes.map((scene, index) => {
+              const status = scene.image_status || imageStatus[scene.image_hash] || 'unknown';
 
-                    {/* Scene number badge */}
-                    <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm text-xs font-bold text-white">
-                      Scene {index + 1}
-                    </div>
+              return (
+                <SlideUp key={scene.id} delay={index * 50}>
+                  <Card
+                    hover
+                    className="group cursor-pointer overflow-hidden"
+                    onClick={() => openLightbox(scene)}
+                  >
+                    <div className="relative aspect-square overflow-hidden">
+                      <Image
+                        src={scene.image_url}
+                        alt={`Scene ${index + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-                    {/* Key scene indicator */}
-                    {scene.is_key_scene && (
-                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-accent-gold/80 backdrop-blur-sm text-xs font-bold text-background-dark">
-                        Key
+                      {/* Scene number badge */}
+                      <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm text-xs font-bold text-white">
+                        Scene {index + 1}
                       </div>
-                    )}
 
-                    {/* Expand icon on hover */}
-                    <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <div className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
-                        <ChevronRight className="w-4 h-4 text-white" />
+                      {/* Image status badge */}
+                      <div className="absolute top-2 right-2">
+                        <ImageStatusBadge status={status} />
+                      </div>
+
+                      {/* Key scene indicator */}
+                      {scene.is_key_scene && (
+                        <div className="absolute bottom-2 left-2 px-2 py-1 rounded-full bg-accent-gold/80 backdrop-blur-sm text-xs font-bold text-background-dark">
+                          Key
+                        </div>
+                      )}
+
+                      {/* Expand icon on hover */}
+                      <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="p-2 rounded-full bg-white/20 backdrop-blur-sm">
+                          <ChevronRight className="w-4 h-4 text-white" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              </SlideUp>
-            ))}
+                  </Card>
+                </SlideUp>
+              );
+            })}
           </div>
 
           {/* Empty State */}
@@ -206,9 +395,14 @@ export function Gallery() {
                       className="max-w-full max-h-[55vh] lg:max-h-[65vh] object-contain rounded-lg"
                     />
 
+                    {/* Image status badge */}
+                    <div className="absolute top-4 left-4">
+                      <ImageStatusBadge status={selectedScene.image_status || imageStatus[selectedScene.image_hash] || 'unknown'} />
+                    </div>
+
                     {/* Key scene badge */}
                     {selectedScene.is_key_scene && (
-                      <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-accent-gold text-background-dark font-bold text-sm">
+                      <div className="absolute top-14 left-4 px-3 py-1 rounded-full bg-accent-gold text-background-dark font-bold text-sm">
                         Key Scene
                       </div>
                     )}
@@ -242,25 +436,37 @@ export function Gallery() {
 
                 {/* Thumbnail strip - Full width below both image and description */}
                 <div className="flex justify-center gap-3 pb-2">
-                  {scenes.map((scene, index) => (
-                    <button
-                      key={scene.id}
-                      onClick={() => setSelectedScene(scene)}
-                      className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
-                        scene.id === selectedScene.id
-                          ? 'border-accent-gold scale-110'
-                          : 'border-transparent opacity-50 hover:opacity-100'
-                      }`}
-                    >
-                      <img
-                        src={resolveImageUrl(scene.image_url)}
-                        alt={`Thumbnail ${index + 1}`}
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  ))}
+                  {scenes.map((scene, index) => {
+                    const status = scene.image_status || imageStatus[scene.image_hash] || 'unknown';
+
+                    return (
+                      <button
+                        key={scene.id}
+                        onClick={() => setSelectedScene(scene)}
+                        className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all relative ${
+                          scene.id === selectedScene.id
+                            ? 'border-accent-gold scale-110'
+                            : 'border-transparent opacity-50 hover:opacity-100'
+                        }`}
+                      >
+                        <img
+                          src={resolveImageUrl(scene.image_url)}
+                          alt={`Thumbnail ${index + 1}`}
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Status indicator on thumbnail */}
+                        {status !== 'ready' && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            {status === 'processing' && <Loader2 className="w-4 h-4 text-white animate-spin" />}
+                            {status === 'pending' && <Clock className="w-4 h-4 text-yellow-400" />}
+                            {status === 'failed' && <AlertCircle className="w-4 h-4 text-red-400" />}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
