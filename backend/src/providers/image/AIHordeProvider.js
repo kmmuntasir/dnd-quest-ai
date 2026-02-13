@@ -232,24 +232,36 @@ class AIHordeProvider extends ImageProvider {
    * This is the preferred method for the queue system
    * @param {string} prompt - Image generation prompt
    * @param {Object} options - Additional options
+   * @param {string} options.existingHash - Use existing hash instead of generating new one
    * @returns {Promise<{hash: string, url: string, file_path: string}>}
    */
   async generateAndFetch(prompt, options = {}) {
-    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight } = options;
+    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight, existingHash } = options;
 
     // Enhance prompt with style keywords
     const enhancedPrompt = this.enhancePrompt(prompt, style);
 
     return this.executeWithProtection(async () => {
-      // Generate unique hash for this image
-      const hash = this.generateHash();
+      // Use existing hash if provided (for queue), otherwise generate new one
+      const hash = existingHash || this.generateHash();
 
-      // Store metadata with processing status first
       const db = require('../../config/database');
-      await db.run(`
-        INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
-        VALUES (?, ?, '', ?, ?, 'processing', 'aihorde')
-      `, [hash, enhancedPrompt, width, height]);
+
+      // Check if image record exists (for queue jobs)
+      const existingImage = await db.get('SELECT hash FROM images WHERE hash = ?', [hash]);
+
+      if (existingImage) {
+        // Update existing record
+        await db.run(`
+          UPDATE images SET status = 'processing', provider = 'aihorde' WHERE hash = ?
+        `, [hash]);
+      } else {
+        // Create new record
+        await db.run(`
+          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+          VALUES (?, ?, '', ?, ?, 'processing', 'aihorde')
+        `, [hash, enhancedPrompt, width, height]);
+      }
 
       logger.info('Generating and fetching image', { hash, provider: 'aihorde' });
 

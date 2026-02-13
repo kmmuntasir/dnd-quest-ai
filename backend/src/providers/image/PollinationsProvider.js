@@ -115,17 +115,18 @@ class PollinationsProvider extends ImageProvider {
    * Generate image AND fetch it immediately (for eager loading/queue)
    * @param {string} prompt - Image generation prompt
    * @param {Object} options - Additional options
+   * @param {string} options.existingHash - Use existing hash instead of generating new one
    * @returns {Promise<{hash: string, url: string, file_path: string}>}
    */
   async generateAndFetch(prompt, options = {}) {
-    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight } = options;
+    const { style = this.defaultStyle, width = this.defaultWidth, height = this.defaultHeight, existingHash } = options;
 
     // Enhance prompt with style keywords
     const enhancedPrompt = this.enhancePrompt(prompt, style);
 
     return this.executeWithProtection(async () => {
-      // Generate unique hash for this image
-      const hash = this.generateHash();
+      // Use existing hash if provided (for queue), otherwise generate new one
+      const hash = existingHash || this.generateHash();
 
       // Generate seed based on hash for reproducibility
       const seed = parseInt(hash.substring(0, 8), 16) % 1000000;
@@ -133,16 +134,25 @@ class PollinationsProvider extends ImageProvider {
       // Build Pollinations URL
       const pollinationsUrl = this.buildPollinationsUrl(enhancedPrompt, width, height, seed);
 
-      // Store metadata in database with processing status
-      await this._storeImageMetadataWithStatus({
-        hash,
-        prompt: enhancedPrompt,
-        providerUrl: pollinationsUrl,
-        width,
-        height,
-        status: 'processing',
-        provider: 'pollinations'
-      });
+      const db = require('../../config/database');
+
+      // Check if image record exists (for queue jobs)
+      const existingImage = await db.get('SELECT hash FROM images WHERE hash = ?', [hash]);
+
+      if (existingImage) {
+        // Update existing record
+        await db.run(`
+          UPDATE images
+          SET pollinations_url = ?, status = 'processing', provider = 'pollinations'
+          WHERE hash = ?
+        `, [pollinationsUrl, hash]);
+      } else {
+        // Create new record
+        await db.run(`
+          INSERT INTO images (hash, prompt, pollinations_url, width, height, status, provider)
+          VALUES (?, ?, ?, ?, ?, 'processing', 'pollinations')
+        `, [hash, enhancedPrompt, pollinationsUrl, width, height]);
+      }
 
       logger.info('Generating and fetching image', { hash, provider: 'pollinations' });
 
@@ -150,7 +160,6 @@ class PollinationsProvider extends ImageProvider {
       const file_path = await this._fetchFromUrl(pollinationsUrl, hash);
 
       // Update status to ready
-      const db = require('../../config/database');
       await db.run(`
         UPDATE images SET status = 'ready', cached_path = ? WHERE hash = ?
       `, [file_path, hash]);

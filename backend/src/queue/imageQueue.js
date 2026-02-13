@@ -4,7 +4,7 @@
  */
 
 const { logger } = require('../utils/logger');
-const { getImageProvider, imageProviderConfig, getImageFallbackChain } = require('../providers');
+const { getImageProvider, imageProviderConfig, getImageFallbackChain, executeImageWithFallback } = require('../providers');
 const db = require('../config/database');
 
 /**
@@ -92,6 +92,9 @@ class ImageQueue {
       queueLength: this.pendingQueue.length
     });
 
+    // Reset circuit breakers to give providers a fresh start for new adventure
+    resetProviderCircuitBreakers();
+
     this.startProcessing();
   }
 
@@ -159,45 +162,77 @@ class ImageQueue {
     await this.updateImageStatus(job.hash, 'processing');
 
     try {
-      // Get provider and generate image
-      const provider = getImageProvider(imageProviderConfig.primary);
-      if (!provider) {
-        throw new Error('No image provider available');
+      // Get fallback chain and try each provider
+      const fallbackChain = getImageFallbackChain();
+      let lastError = null;
+      let result = null;
+
+      for (const providerName of fallbackChain) {
+        const provider = getImageProvider(providerName);
+        if (!provider) {
+          logger.debug(`Provider ${providerName} not available, skipping`);
+          continue;
+        }
+
+        // Check if provider can accept requests (circuit breaker)
+        if (!provider.canRequest()) {
+          logger.debug(`Provider ${providerName} circuit breaker open, skipping`);
+          continue;
+        }
+
+        try {
+          logger.info(`Trying provider ${providerName} for image`, { hash: job.hash });
+
+          // Generate the image (this downloads and stores it)
+          result = await provider.generateAndFetch(job.prompt, {
+            ...job.options,
+            existingHash: job.hash
+          });
+
+          if (result && result.file_path) {
+            // Success! Update database with success
+            await db.run(`
+              UPDATE images
+              SET status = 'ready',
+                  cached_path = ?,
+                  provider = ?
+              WHERE hash = ?
+            `, [result.file_path, providerName, job.hash]);
+
+            job.status = JobStatus.COMPLETED;
+            job.completedAt = Date.now();
+            job.result = result;
+
+            logger.info('Image job completed', {
+              hash: job.hash,
+              duration: job.completedAt - job.startedAt,
+              provider: providerName
+            });
+
+            this.onJobComplete(job);
+            return; // Success, exit the function
+          }
+        } catch (providerError) {
+          lastError = providerError;
+          logger.warn(`Provider ${providerName} failed for job`, {
+            hash: job.hash,
+            error: providerError.message
+          });
+          // Continue to next provider
+        }
       }
 
-      // Generate the image (this downloads and stores it)
-      const result = await provider.generateAndFetch(job.prompt, job.options);
+      // All providers failed
+      throw lastError || new Error('No image providers available');
 
-      if (!result || !result.file_path) {
-        throw new Error('Image generation returned no result');
-      }
-
-      // Update database with success
-      await db.run(`
-        UPDATE images
-        SET status = 'ready',
-            cached_path = ?,
-            provider = ?
-        WHERE hash = ?
-      `, [result.file_path, provider.name, job.hash]);
-
-      job.status = JobStatus.COMPLETED;
-      job.completedAt = Date.now();
-      job.result = result;
-
-      logger.info('Image job completed', {
-        hash: job.hash,
-        duration: job.completedAt - job.startedAt,
-        provider: provider.name
-      });
-
-      this.onJobComplete(job);
     } catch (error) {
       job.error = error.message;
       logger.error('Image job failed', {
         hash: job.hash,
         error: error.message,
-        attempt: job.attempts
+        stack: error.stack,
+        attempt: job.attempts,
+        prompt: job.prompt?.substring(0, 100)
       });
 
       // Retry if attempts remaining
@@ -347,6 +382,23 @@ const imageQueue = new ImageQueue({
 });
 
 /**
+ * Reset circuit breakers for all providers
+ * Useful when starting a new batch of image generation
+ */
+function resetProviderCircuitBreakers() {
+  const { getImageProvider, getAvailableImageProviders } = require('../providers');
+  const providers = getAvailableImageProviders();
+
+  for (const providerName of providers) {
+    const provider = getImageProvider(providerName);
+    if (provider && provider.circuitBreaker) {
+      provider.circuitBreaker.reset();
+      logger.info(`Reset circuit breaker for ${providerName}`);
+    }
+  }
+}
+
+/**
  * Update adventure image progress in database
  * @param {number} adventureId - Adventure ID
  */
@@ -407,5 +459,6 @@ module.exports = {
   ImageQueue,
   ImageJob,
   JobStatus,
-  updateAdventureImageProgress
+  updateAdventureImageProgress,
+  resetProviderCircuitBreakers
 };
