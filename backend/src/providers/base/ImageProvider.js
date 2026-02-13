@@ -10,8 +10,8 @@ const fs = require('fs');
 const db = require('../../config/database');
 const { logger } = require('../../utils/logger');
 
-// Default cache directory for images
-const DEFAULT_CACHE_DIR = path.resolve(__dirname, '../../../../storage/images');
+// Default cache directory for images (backend/storage/images)
+const DEFAULT_CACHE_DIR = path.resolve(__dirname, '../../../storage/images');
 
 /**
  * Abstract base class for image generation providers
