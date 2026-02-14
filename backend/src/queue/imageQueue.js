@@ -86,10 +86,12 @@ class ImageQueue {
     const jobs = jobsData.map(data => new ImageJob(data));
     this.pendingQueue.push(...jobs);
 
+    // Log queue order for debugging
     logger.info('Batch of image jobs queued', {
       count: jobs.length,
       adventureId: jobs[0]?.adventureId,
-      queueLength: this.pendingQueue.length
+      queueLength: this.pendingQueue.length,
+      queueOrder: jobs.map(j => ({ hash: j.hash.substring(0, 8), type: j.type, entityId: j.entityId }))
     });
 
     // Reset circuit breakers to give providers a fresh start for new adventure
@@ -123,8 +125,17 @@ class ImageQueue {
    * Process the queue
    */
   async processQueue() {
+    let jobOrder = 0;
     while (this.isProcessing && this.pendingQueue.length > 0 && this.activeJobs.size < this.concurrency) {
       const job = this.pendingQueue.shift();
+      job._queueOrder = ++jobOrder; // Track order for debugging
+      logger.info('Starting job from queue', {
+        queuePosition: job._queueOrder,
+        hash: job.hash.substring(0, 8),
+        type: job.type,
+        entityId: job.entityId,
+        remainingInQueue: this.pendingQueue.length
+      });
       this.processJob(job);
     }
 
