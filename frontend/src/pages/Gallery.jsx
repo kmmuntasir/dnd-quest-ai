@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Clock, AlertCircle, CheckCircle, Loader2, Wrench } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -79,6 +79,9 @@ export function Gallery() {
     return stats.pending > 0 || stats.failed > 0;
   }, [getImageStats]);
 
+  // Track previous image status to detect changes (avoid dependency loop)
+  const prevImageStatusRef = useRef({});
+
   // Load adventure status (for image generation progress)
   const loadImageStatus = useCallback(async () => {
     try {
@@ -91,13 +94,15 @@ export function Gallery() {
       if (data.images) {
         data.images.forEach(img => {
           statusMap[img.hash] = img.status;
-          // Check if this image is now ready but wasn't before
-          if (img.status === 'ready' && imageStatus[img.hash] && imageStatus[img.hash] !== 'ready') {
+          // Check if this image is now ready but wasn't before (using ref)
+          if (img.status === 'ready' && prevImageStatusRef.current[img.hash] && prevImageStatusRef.current[img.hash] !== 'ready') {
             hasNewlyReady = true;
           }
         });
       }
 
+      // Update ref before state
+      prevImageStatusRef.current = statusMap;
       setImageStatus(statusMap);
 
       // Update adventure status
@@ -129,7 +134,7 @@ export function Gallery() {
       console.error('Failed to load image status:', error);
       return null;
     }
-  }, [adventureId, adventure, imageStatus, selectedScene]);
+  }, [adventureId, adventure?.status, selectedScene?.id]);
 
   // Poll for status updates when images are processing
   useEffect(() => {
